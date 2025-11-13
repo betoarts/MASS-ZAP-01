@@ -9,7 +9,6 @@ export const ptBR = {
       loading_button_label: 'Entrando...',
       social_provider_text: 'Entrar com {{provider}}',
       link_text: 'Não tem conta? Cadastre-se',
-      // Alguns temas usam esta chave para o link de esqueci a senha
       forgot_password_link_text: 'Esqueceu sua senha?',
     },
     sign_up: {
@@ -22,12 +21,24 @@ export const ptBR = {
       social_provider_text: 'Cadastrar com {{provider}}',
       link_text: 'Já tem uma conta? Entrar',
     },
+    // Algumas versões usam "forgot_password", outras "forgotten_password"
     forgot_password: {
-      email_label: 'Digite seu e-mail para redefinir a senha',
-      button_label: 'Enviar instruções de redefinição',
+      email_label: 'E-mail para redefinir a senha',
+      email_input_placeholder: 'Seu e-mail',
+      button_label: 'Enviar instruções',
       loading_button_label: 'Enviando...',
       link_text: 'Esqueceu sua senha?',
       confirmation_text: 'Verifique seu e-mail para redefinir a senha',
+      back_to_sign_in_link_text: 'Voltar para entrar',
+    },
+    forgotten_password: {
+      email_label: 'E-mail para redefinir a senha',
+      email_input_placeholder: 'Seu e-mail',
+      button_label: 'Enviar instruções',
+      loading_button_label: 'Enviando...',
+      link_text: 'Esqueceu sua senha?',
+      confirmation_text: 'Verifique seu e-mail para redefinir a senha',
+      back_to_sign_in_link_text: 'Voltar para entrar',
     },
     magic_link: {
       email_input_label: 'E-mail',
@@ -36,6 +47,7 @@ export const ptBR = {
       loading_button_label: 'Enviando link mágico...',
       link_text: 'Entrar com link mágico',
       link_sent_text: 'Verifique seu e-mail para o link mágico',
+      back_to_sign_in_link_text: 'Voltar para entrar',
     },
     update_password: {
       password_label: 'Nova senha',
@@ -43,6 +55,7 @@ export const ptBR = {
       button_label: 'Atualizar senha',
       loading_button_label: 'Atualizando...',
       password_mismatch_error: 'As senhas não coincidem',
+      back_to_sign_in_link_text: 'Voltar para entrar',
     },
     verify_otp: {
       email_input_label: 'E-mail',
@@ -53,6 +66,7 @@ export const ptBR = {
       token_input_placeholder: 'Digite o código recebido',
       button_label: 'Confirmar',
       loading_button_label: 'Confirmando...',
+      back_to_sign_in_link_text: 'Voltar para entrar',
     },
   },
 };
