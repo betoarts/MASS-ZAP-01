@@ -2,14 +2,15 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Upload } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ContactList, getContactLists, addContactList, updateContactList, deleteContactList } from "@/lib/contact-storage"; // Removed saveContactLists
+import { ContactList, getContactLists, addContactList, updateContactList, deleteContactList } from "@/lib/contact-storage";
 import { ContactListTable } from "@/components/contacts/ContactListTable";
 import { ContactListForm } from "@/components/contacts/ContactListForm";
-import { ContactImportDialog } from "@/components/contacts/ContactImportDialog"; // Import the new component
-import { useSession } from "@/components/auth/SessionContextProvider"; // Import useSession
+import { ContactImportDialog } from "@/components/contacts/ContactImportDialog";
+import { useSession } from "@/components/auth/SessionContextProvider";
 import { toast } from "sonner";
+import PageHeader from "@/components/layout/PageHeader";
 
 const Contacts = () => {
   const [contactLists, setContactLists] = React.useState<ContactList[]>([]);
@@ -17,7 +18,7 @@ const Contacts = () => {
   const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
   const [editingList, setEditingList] = React.useState<ContactList | null>(null);
   const [selectedListForImport, setSelectedListForImport] = React.useState<ContactList | null>(null);
-  const { user } = useSession(); // Get user from session
+  const { user } = useSession();
 
   React.useEffect(() => {
     const fetchLists = async () => {
@@ -68,34 +69,35 @@ const Contacts = () => {
   };
 
   const handleImportSuccess = async () => {
-    // Re-fetch contact lists to update contact counts
     const lists = await getContactLists();
     setContactLists(lists);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Gerenciamento de Contatos</h1>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setEditingList(null); setIsFormOpen(true); }}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Lista de Contatos
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>{editingList ? "Editar Lista de Contatos" : "Adicionar Nova Lista de Contatos"}</DialogTitle>
-            </DialogHeader>
-            <ContactListForm initialData={editingList} onSave={handleSaveList} />
-          </DialogContent>
-        </Dialog>
-      </div>
+      <PageHeader
+        title="Gerenciamento de Contatos"
+        actions={
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { setEditingList(null); setIsFormOpen(true); }}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Lista de Contatos
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>{editingList ? "Editar Lista de Contatos" : "Adicionar Nova Lista de Contatos"}</DialogTitle>
+              </DialogHeader>
+              <ContactListForm initialData={editingList} onSave={handleSaveList} />
+            </DialogContent>
+          </Dialog>
+        }
+      />
       <ContactListTable
         contactLists={contactLists}
         onEdit={handleEditList}
         onDelete={handleDeleteList}
-        onImportContacts={handleOpenImportDialog} // Pass the new handler
+        onImportContacts={handleOpenImportDialog}
       />
 
       {selectedListForImport && (

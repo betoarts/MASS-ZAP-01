@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader,  DialogTitle, DialogTrigger } from
 import { Instance, getInstances, saveInstance, deleteInstance } from "@/lib/storage";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { toast } from "sonner";
+import PageHeader from "@/components/layout/PageHeader";
 
 const Instances = () => {
   const [instances, setInstances] = React.useState<Instance[]>([]);
@@ -30,18 +31,17 @@ const Instances = () => {
       return;
     }
 
-    // Se estamos editando, usar o ID existente
     const instanceToSave = editingInstance 
       ? { ...newInstanceData, id: editingInstance.id }
       : newInstanceData;
 
     const savedInstance = await saveInstance(user.id, instanceToSave);
     if (savedInstance) {
-      if (editingInstance) { // Se estava editando, atualizar na lista
+      if (editingInstance) {
         setInstances((prev) =>
           prev.map((inst) => (inst.id === savedInstance.id ? savedInstance : inst))
         );
-      } else { // Se era novo, adicionar à lista
+      } else {
         setInstances((prev) => [...prev, savedInstance]);
       }
       toast.success("Instância salva com sucesso!");
@@ -68,37 +68,36 @@ const Instances = () => {
   };
 
   const handleImportConfig = (config: Omit<Instance, 'id' | 'user_id'>) => {
-    // Criar uma nova instância com as configurações importadas
     const newInstance: Omit<Instance, 'id' | 'user_id'> = {
       name: config.name + " (Importado)",
       url: config.url,
       instanceName: config.instanceName,
       apiKey: config.apiKey,
     };
-    
-    // Abrir o formulário com os dados importados
     setEditingInstance(newInstance as Instance);
     setIsFormOpen(true);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Gerenciamento de Instâncias</h1>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setEditingInstance(null); setIsFormOpen(true); }}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Instância
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>{editingInstance ? "Editar Instância" : "Adicionar Nova Instância"}</DialogTitle>
-            </DialogHeader>
-            <InstanceForm initialData={editingInstance} onSave={handleSave} />
-          </DialogContent>
-        </Dialog>
-      </div>
+      <PageHeader
+        title="Gerenciamento de Instâncias"
+        actions={
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { setEditingInstance(null); setIsFormOpen(true); }}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Instância
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>{editingInstance ? "Editar Instância" : "Adicionar Nova Instância"}</DialogTitle>
+              </DialogHeader>
+              <InstanceForm initialData={editingInstance} onSave={handleSave} />
+            </DialogContent>
+          </Dialog>
+        }
+      />
       <InstanceTable
         instances={instances}
         onEdit={handleEdit}

@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import PageHeader from "@/components/layout/PageHeader";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -56,7 +57,6 @@ const Dashboard = () => {
     },
   });
 
-  // Novo: contagem de mensagens enviadas por campanhas
   const { data: messageSentCount, isLoading: isLoadingMessageCount } = useQuery({
     queryKey: ["messageSentCount"],
     queryFn: getMessageSentCount,
@@ -113,7 +113,7 @@ const Dashboard = () => {
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-64px)] space-y-6">
-      <h1 className="text-3xl font-bold">Painel</h1>
+      <PageHeader title="Painel" subtitle="Resumo geral das suas atividades e campanhas" />
 
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">

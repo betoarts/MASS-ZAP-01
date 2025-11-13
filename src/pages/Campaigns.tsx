@@ -3,15 +3,16 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"; // Import DialogDescription
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Campaign, getCampaigns, addCampaign, updateCampaign, deleteCampaign } from "@/lib/campaign-storage";
 import { CampaignTable } from "@/components/campaigns/CampaignTable";
 import { CampaignForm } from "@/components/campaigns/CampaignForm";
 import { Instance, getInstances } from "@/lib/storage";
 import { ContactList, getContactLists } from "@/lib/contact-storage";
-import { toast } from "sonner"; // Import toast for feedback
-import { useSession } from "@/components/auth/SessionContextProvider"; // Import useSession
-import { CampaignFormData } from "@/lib/campaign-utils"; // Importar CampaignFormData
+import { toast } from "sonner";
+import { useSession } from "@/components/auth/SessionContextProvider";
+import { CampaignFormData } from "@/lib/campaign-utils";
+import PageHeader from "@/components/layout/PageHeader";
 
 const Campaigns = () => {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
@@ -19,7 +20,7 @@ const Campaigns = () => {
   const [contactLists, setContactLists] = React.useState<ContactList[]>([]);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingCampaign, setEditingCampaign] = React.useState<Campaign | null>(null);
-  const { user } = useSession(); // Get user from session
+  const { user } = useSession();
 
   const fetchCampaignData = React.useCallback(async () => {
     const fetchedCampaigns = await getCampaigns();
@@ -34,7 +35,7 @@ const Campaigns = () => {
     fetchCampaignData();
   }, [fetchCampaignData]);
 
-  const handleSaveCampaign = async (formData: CampaignFormData) => { // Usar CampaignFormData
+  const handleSaveCampaign = async (formData: CampaignFormData) => {
     if (!user) {
       toast.error("Você precisa estar logado para criar/atualizar campanhas.");
       return;
@@ -42,7 +43,6 @@ const Campaigns = () => {
 
     let success = false;
     if (editingCampaign) {
-      // Ao atualizar, combinamos os dados do formulário (formData) com o ID e status da campanha existente
       const updatedCampaign = await updateCampaign(user.id, { ...formData, id: editingCampaign.id, status: editingCampaign.status });
       if (updatedCampaign) {
         toast.success("Campanha atualizada com sucesso!");
@@ -51,7 +51,6 @@ const Campaigns = () => {
         toast.error("Falha ao atualizar campanha.");
       }
     } else {
-      // Ao criar, passamos os dados do formulário diretamente
       const newCampaign = await addCampaign(user.id, formData);
       if (newCampaign) {
         toast.success("Campanha criada com sucesso!");
@@ -62,7 +61,7 @@ const Campaigns = () => {
     }
     
     if (success) {
-      await fetchCampaignData(); // Re-fetch all data to ensure consistency
+      await fetchCampaignData();
       setIsFormOpen(false);
       setEditingCampaign(null);
     }
@@ -77,7 +76,7 @@ const Campaigns = () => {
     const success = await deleteCampaign(id);
     if (success) {
       toast.success("Campanha excluída com sucesso!");
-      await fetchCampaignData(); // Re-fetch all data after deletion
+      await fetchCampaignData();
     } else {
       toast.error("Falha ao excluir campanha.");
     }
@@ -85,37 +84,39 @@ const Campaigns = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Gerenciamento de Campanhas</h1>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setEditingCampaign(null); setIsFormOpen(true); }}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Criar Nova Campanha
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingCampaign ? "Editar Campanha" : "Criar Nova Campanha"}</DialogTitle>
-              <DialogDescription>
-                {editingCampaign ? "Edite os detalhes da sua campanha existente." : "Preencha os detalhes para criar uma nova campanha."}
-              </DialogDescription>
-            </DialogHeader>
-            <CampaignForm
-              initialData={editingCampaign}
-              onSave={handleSaveCampaign}
-              instances={instances}
-              contactLists={contactLists}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+      <PageHeader
+        title="Gerenciamento de Campanhas"
+        actions={
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { setEditingCampaign(null); setIsFormOpen(true); }}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Criar Nova Campanha
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editingCampaign ? "Editar Campanha" : "Criar Nova Campanha"}</DialogTitle>
+                <DialogDescription>
+                  {editingCampaign ? "Edite os detalhes da sua campanha existente." : "Preencha os detalhes para criar uma nova campanha."}
+                </DialogDescription>
+              </DialogHeader>
+              <CampaignForm
+                initialData={editingCampaign}
+                onSave={handleSaveCampaign}
+                instances={instances}
+                contactLists={contactLists}
+              />
+            </DialogContent>
+          </Dialog>
+        }
+      />
       <CampaignTable
         campaigns={campaigns}
         instances={instances}
         contactLists={contactLists}
         onEdit={handleEditCampaign}
         onDelete={handleDeleteCampaign}
-        onCampaignStatusChange={fetchCampaignData} // This already calls fetchCampaignData
+        onCampaignStatusChange={fetchCampaignData}
       />
     </div>
   );
