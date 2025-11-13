@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface CampaignLog {
   id: string;
   user_id: string;
-  campaign_id: string;
+  campaign_id: string | null;
   event_type: string;
   message: string;
   metadata?: Record<string, any>;
@@ -55,4 +55,19 @@ export const getAllCampaignLogs = async (): Promise<CampaignLog[]> => {
     return [];
   }
   return data as CampaignLog[];
+};
+
+// Novo: conta quantas mensagens foram enviadas por campanhas (1 por mensagem para cada contato)
+export const getMessageSentCount = async (): Promise<number> => {
+  const { count, error } = await supabase
+    .from("campaign_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("event_type", "message_sent")
+    .not("campaign_id", "is", null); // garante que é de campanha, não propostas
+
+  if (error) {
+    console.error("Error counting sent messages:", error);
+    return 0;
+  }
+  return count ?? 0;
 };

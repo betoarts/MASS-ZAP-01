@@ -6,9 +6,9 @@ import { DashboardStatCard } from "@/components/dashboard/DashboardStatCard";
 import { getInstances } from "@/lib/storage";
 import { getContactLists } from "@/lib/contact-storage";
 import { getCampaigns } from "@/lib/campaign-storage";
-import { getAllCampaignLogs, CampaignLog } from "@/lib/log-storage";
-import { getCustomers } from "@/lib/crm-storage"; // Importar a função para buscar clientes
-import { Settings, Users, Send, Briefcase } from "lucide-react"; // Importar ícone Briefcase
+import { getAllCampaignLogs, CampaignLog, getMessageSentCount } from "@/lib/log-storage";
+import { getCustomers } from "@/lib/crm-storage";
+import { Settings, Users, Send, Briefcase, MessageCircle } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -43,7 +43,7 @@ const Dashboard = () => {
     queryFn: getCampaigns,
   });
 
-  const { data: customers, isLoading: isLoadingCustomers } = useQuery({ // Nova query para clientes
+  const { data: customers, isLoading: isLoadingCustomers } = useQuery({
     queryKey: ["customers"],
     queryFn: getCustomers,
   });
@@ -56,12 +56,19 @@ const Dashboard = () => {
     },
   });
 
+  // Novo: contagem de mensagens enviadas por campanhas
+  const { data: messageSentCount, isLoading: isLoadingMessageCount } = useQuery({
+    queryKey: ["messageSentCount"],
+    queryFn: getMessageSentCount,
+  });
+
   const isLoading =
     isLoadingInstances ||
     isLoadingContactLists ||
     isLoadingCampaigns ||
-    isLoadingCustomers || // Incluir loading de clientes
-    isLoadingLogs;
+    isLoadingCustomers ||
+    isLoadingLogs ||
+    isLoadingMessageCount;
 
   const getEventTypeBadge = (eventType: string) => {
     switch (eventType) {
@@ -109,14 +116,15 @@ const Dashboard = () => {
       <h1 className="text-3xl font-bold">Painel</h1>
 
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"> {/* Ajustado para 4 colunas */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Skeleton className="h-24" />
           <Skeleton className="h-24" />
           <Skeleton className="h-24" />
-          <Skeleton className="h-24" /> {/* Novo skeleton para clientes */}
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"> {/* Ajustado para 4 colunas */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <DashboardStatCard
             title="Total de Instâncias"
             value={instances?.length ?? 0}
@@ -135,11 +143,17 @@ const Dashboard = () => {
             icon={Send}
             description="Campanhas ativas e rascunhos"
           />
-          <DashboardStatCard // Novo cartão de estatísticas para clientes
+          <DashboardStatCard
             title="Total de Clientes"
             value={customers?.length ?? 0}
             icon={Briefcase}
             description="Clientes cadastrados no CRM"
+          />
+          <DashboardStatCard
+            title="Mensagens Enviadas"
+            value={messageSentCount ?? 0}
+            icon={MessageCircle}
+            description="Total enviado pelas campanhas"
           />
         </div>
       )}
@@ -178,13 +192,17 @@ const Dashboard = () => {
                     <TableCell>{getEventTypeBadge(log.event_type)}</TableCell>
                     <TableCell>{log.message}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="link"
-                        size="sm"
-                        onClick={() => handleViewCampaign(log.campaign_id)}
-                      >
-                        Ver Campanha
-                      </Button>
+                      {log.campaign_id ? (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          onClick={() => handleViewCampaign(log.campaign_id!)}
+                        >
+                          Ver Campanha
+                        </Button>
+                      ) : (
+                        "-"
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
