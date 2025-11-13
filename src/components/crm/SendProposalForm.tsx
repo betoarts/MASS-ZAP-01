@@ -73,16 +73,18 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
 
   React.useEffect(() => {
     const fetchInstances = async () => {
-      setIsLoadingInstances(true);
-      const fetchedInstances = await getInstances();
-      setInstances(fetchedInstances);
-      if (fetchedInstances.length > 0) {
-        form.setValue("instanceId", fetchedInstances[0].id!); // Pre-select first instance
+      if (user) {
+        setIsLoadingInstances(true);
+        const fetchedInstances = await getInstances(user.id);
+        setInstances(fetchedInstances);
+        if (fetchedInstances.length > 0) {
+          form.setValue("instanceId", fetchedInstances[0].id!); // Pre-select first instance
+        }
+        setIsLoadingInstances(false);
       }
-      setIsLoadingInstances(false);
     };
     fetchInstances();
-  }, [form]);
+  }, [user, form]);
 
   const handleEmojiClick = (emojiData: EmojiClickData, fieldName: "messageText" | "mediaCaption") => {
     if (fieldName === "messageText") {

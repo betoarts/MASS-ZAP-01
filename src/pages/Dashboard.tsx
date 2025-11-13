@@ -25,13 +25,16 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import PageHeader from "@/components/layout/PageHeader";
+import { useSession } from "@/components/auth/SessionContextProvider";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user } = useSession();
 
   const { data: instances, isLoading: isLoadingInstances } = useQuery({
-    queryKey: ["instances"],
-    queryFn: getInstances,
+    queryKey: ["instances", user?.id],
+    queryFn: () => user ? getInstances(user.id) : [],
+    enabled: !!user,
   });
 
   const { data: contactLists, isLoading: isLoadingContactLists } = useQuery({

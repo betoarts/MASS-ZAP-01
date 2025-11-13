@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { InstanceQRConnection } from "./InstanceQRConnection";
 import { InstanceConfigExport } from "./InstanceConfigExport";
 import { toast } from "sonner";
+import { useSession } from "@/components/auth/SessionContextProvider";
 
 interface InstanceTableProps {
   instances: Instance[];
@@ -26,6 +27,7 @@ interface InstanceTableProps {
 }
 
 export const InstanceTable: React.FC<InstanceTableProps> = ({ instances, onEdit, onDelete, onImportConfig }) => {
+  const { user } = useSession();
   const [connectionStates, setConnectionStates] = React.useState<Record<string, string>>({});
   const [qrDialogInstance, setQRDialogInstance] = React.useState<Instance | null>(null);
   const [exportDialogInstance, setExportDialogInstance] = React.useState<Instance | null>(null);

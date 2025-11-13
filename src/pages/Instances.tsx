@@ -19,11 +19,13 @@ const Instances = () => {
 
   React.useEffect(() => {
     const fetchInstances = async () => {
-      const fetchedInstances = await getInstances();
-      setInstances(fetchedInstances);
+      if (user) {
+        const fetchedInstances = await getInstances(user.id);
+        setInstances(fetchedInstances);
+      }
     };
     fetchInstances();
-  }, []);
+  }, [user]);
 
   const handleSave = async (newInstanceData: Omit<Instance, 'id' | 'user_id'>) => {
     if (!user) {
@@ -58,7 +60,12 @@ const Instances = () => {
   };
 
   const handleDelete = async (id: string) => {
-    const success = await deleteInstance(id);
+    if (!user) {
+      toast.error("Você precisa estar logado para excluir instâncias.");
+      return;
+    }
+
+    const success = await deleteInstance(id, user.id);
     if (success) {
       setInstances((prev) => prev.filter((inst) => inst.id !== id));
       toast.success("Instância excluída com sucesso!");

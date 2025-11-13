@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Instance } from "@/lib/storage";
 import { QrCode, Wifi, WifiOff } from "lucide-react";
 import { InstanceQRConnection } from "./InstanceQRConnection";
+import { useSession } from "@/components/auth/SessionContextProvider";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -40,6 +41,7 @@ interface InstanceFormProps {
 }
 
 export const InstanceForm: React.FC<InstanceFormProps> = ({ initialData, onSave }) => {
+  const { user } = useSession();
   const [isQRDialogOpen, setIsQRDialogOpen] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<string>("unknown");
 
@@ -83,10 +85,10 @@ export const InstanceForm: React.FC<InstanceFormProps> = ({ initialData, onSave 
 
   // Verificar status quando o formulário é carregado com dados existentes
   React.useEffect(() => {
-    if (initialData) {
+    if (initialData && user) {
       checkConnectionStatus();
     }
-  }, [initialData, checkConnectionStatus]);
+  }, [initialData, checkConnectionStatus, user]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     onSave(values as Instance);
@@ -200,17 +202,19 @@ export const InstanceForm: React.FC<InstanceFormProps> = ({ initialData, onSave 
       </Form>
 
       {/* Diálogo de Conexão QR Code */}
-      <InstanceQRConnection
-        isOpen={isQRDialogOpen}
-        onOpenChange={setIsQRDialogOpen}
-        instance={{
-          id: form.getValues("id") || "",
-          name: form.getValues("name"),
-          url: form.getValues("url"),
-          instanceName: form.getValues("instanceName"),
-          apiKey: form.getValues("apiKey"),
-        }}
-      />
+      {user && (
+        <InstanceQRConnection
+          isOpen={isQRDialogOpen}
+          onOpenChange={setIsQRDialogOpen}
+          instance={{
+            id: form.getValues("id") || "",
+            name: form.getValues("name"),
+            url: form.getValues("url"),
+            instanceName: form.getValues("instanceName"),
+            apiKey: form.getValues("apiKey"),
+          }}
+        />
+      )}
     </>
   );
 };

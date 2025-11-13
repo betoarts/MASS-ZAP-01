@@ -9,8 +9,12 @@ export interface Instance {
   user_id?: string; // Added for Supabase RLS
 }
 
-export const getInstances = async (): Promise<Instance[]> => {
-  const { data, error } = await supabase.from("instances").select("*");
+export const getInstances = async (userId: string): Promise<Instance[]> => {
+  const { data, error } = await supabase
+    .from("instances")
+    .select("*")
+    .eq("user_id", userId);
+
   if (error) {
     console.error("Error fetching instances:", error);
     return [];
@@ -39,6 +43,7 @@ export const saveInstance = async (userId: string, instance: Omit<Instance, 'use
         updated_at: new Date().toISOString(),
       })
       .eq("id", instance.id)
+      .eq("user_id", userId) // Ensure user can only update their own instances
       .select()
       .single();
 
@@ -85,8 +90,14 @@ export const saveInstance = async (userId: string, instance: Omit<Instance, 'use
   }
 };
 
-export const getInstanceById = async (id: string): Promise<Instance | null> => {
-  const { data, error } = await supabase.from("instances").select("*").eq("id", id).single();
+export const getInstanceById = async (id: string, userId: string): Promise<Instance | null> => {
+  const { data, error } = await supabase
+    .from("instances")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId) // Ensure user can only access their own instances
+    .single();
+
   if (error) {
     console.error("Error fetching instance by ID:", error);
     return null;
@@ -102,8 +113,13 @@ export const getInstanceById = async (id: string): Promise<Instance | null> => {
   } as Instance : null;
 };
 
-export const deleteInstance = async (id: string): Promise<boolean> => {
-  const { error } = await supabase.from("instances").delete().eq("id", id);
+export const deleteInstance = async (id: string, userId: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from("instances")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId); // Ensure user can only delete their own instances
+
   if (error) {
     console.error("Error deleting instance:", error);
     return false;

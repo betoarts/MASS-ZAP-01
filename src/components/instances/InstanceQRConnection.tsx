@@ -193,7 +193,7 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
       }
     } catch (error) {
       console.error("[QR] Error disconnecting:", error);
-      toast.error("Erro ao desconectar");
+      toast.error("ErroErro ao desconectar");
     }
   };
 

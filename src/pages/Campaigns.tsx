@@ -25,11 +25,15 @@ const Campaigns = () => {
   const fetchCampaignData = React.useCallback(async () => {
     const fetchedCampaigns = await getCampaigns();
     setCampaigns(fetchedCampaigns);
-    const fetchedInstances = await getInstances();
-    setInstances(fetchedInstances);
+    
+    if (user) {
+      const fetchedInstances = await getInstances(user.id);
+      setInstances(fetchedInstances);
+    }
+    
     const fetchedContactLists = await getContactLists();
     setContactLists(fetchedContactLists);
-  }, []);
+  }, [user]);
 
   React.useEffect(() => {
     fetchCampaignData();
