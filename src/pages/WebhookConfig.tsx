@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { WebhookSourceForm } from "@/components/webhook/WebhookSourceForm";
 import { WebhookSource, getWebhookSources, createWebhookSource, updateWebhookSource, deleteWebhookSource } from "@/lib/webhook-storage";
+import { supabase } from "@/integrations/supabase/client";
 
 const WebhookConfig = () => {
   const { user } = useSession();
@@ -24,16 +25,55 @@ const WebhookConfig = () => {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingSource, setEditingSource] = React.useState<WebhookSource | null>(null);
 
+  // Estados das estatísticas
+  const [isStatsLoading, setIsStatsLoading] = React.useState(true);
+  const [processedCount, setProcessedCount] = React.useState<number>(0);
+  const [successCount, setSuccessCount] = React.useState<number>(0);
+  const [errorCount, setErrorCount] = React.useState<number>(0);
+
   React.useEffect(() => {
     if (user) {
       fetchSources();
+      fetchStats();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchSources = async () => {
     if (!user) return;
     const fetchedSources = await getWebhookSources(user.id);
     setSources(fetchedSources);
+  };
+
+  const fetchStats = async () => {
+    if (!user) return;
+    setIsStatsLoading(true);
+
+    // Webhooks processados: entradas 'webhook_received'
+    const { count: receivedCount } = await supabase
+      .from("campaign_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("event_type", "webhook_received");
+
+    // Sucesso: 'contact_added' + 'contact_updated'
+    const { count: okCount } = await supabase
+      .from("campaign_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .in("event_type", ["contact_added", "contact_updated"]);
+
+    // Erros: 'webhook_error' + 'webhook_auth_error'
+    const { count: errCount } = await supabase
+      .from("campaign_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .in("event_type", ["webhook_error", "webhook_auth_error"]);
+
+    setProcessedCount(receivedCount ?? 0);
+    setSuccessCount(okCount ?? 0);
+    setErrorCount(errCount ?? 0);
+    setIsStatsLoading(false);
   };
 
   const handleSaveSource = async (sourceData: Omit<WebhookSource, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
@@ -63,6 +103,8 @@ const WebhookConfig = () => {
 
     if (success) {
       fetchSources();
+      // Atualizar estatísticas não é estritamente necessário aqui, mas mantemos consistente
+      fetchStats();
       setIsFormOpen(false);
       setEditingSource(null);
     }
@@ -78,10 +120,14 @@ const WebhookConfig = () => {
     if (success) {
       toast.success("Fonte de webhook excluída com sucesso!");
       fetchSources();
+      fetchStats();
     } else {
       toast.error("Falha ao excluir fonte de webhook.");
     }
   };
+
+  const totalAttempts = successCount + errorCount;
+  const successRate = totalAttempts > 0 ? ((successCount / totalAttempts) * 100).toFixed(1) : "—";
 
   return (
     <div className="space-y-6">
@@ -151,12 +197,17 @@ const WebhookConfig = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Webhooks Processados</span>
-                <span className="font-medium">1,250</span>
+                <span className="font-medium">{isStatsLoading ? "..." : processedCount}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Taxa de Sucesso</span>
-                <span className="font-medium text-green-600">98.5%</span>
+                <span className="font-medium">{isStatsLoading ? "..." : successRate}</span>
               </div>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={fetchStats} disabled={isStatsLoading}>
+                Atualizar
+              </Button>
             </div>
           </CardContent>
         </Card>
