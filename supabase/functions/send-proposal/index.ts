@@ -80,6 +80,7 @@ serve(async (req) => {
       .from('instances')
       .select('*')
       .eq('id', instanceId)
+      .eq('user_id', userId) // Ensure the instance belongs to the user
       .single();
 
     if (instanceError || !instance) {

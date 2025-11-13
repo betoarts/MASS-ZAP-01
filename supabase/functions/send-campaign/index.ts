@@ -100,6 +100,7 @@ serve(async (req) => {
       .from('instances')
       .select('*')
       .eq('id', campaign.instance_id)
+      .eq('user_id', userId) // Ensure the instance belongs to the user
       .single();
 
     if (instanceError || !instance) {
