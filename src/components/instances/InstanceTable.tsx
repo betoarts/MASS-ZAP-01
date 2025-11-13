@@ -37,35 +37,69 @@ export const InstanceTable: React.FC<InstanceTableProps> = ({ instances, onEdit,
 
   const checkConnectionStatus = React.useCallback(async (instance: Instance) => {
     try {
-      if (!user?.id || !instance.id) return "unknown";
+      if (!user?.id || !instance.id) {
+        console.log(`[InstanceTable] Skipping connection check - missing user (${!!user?.id}) or instance id (${!!instance.id})`);
+        return "unknown";
+      }
+
+      console.log(`[InstanceTable] Checking connection status for instance ${instance.id} (${instance.name})`);
+      
       const { data, error } = await supabase.functions.invoke("evolution-proxy", {
-        body: { action: "connectionState", instanceId: instance.id, userId: user.id },
+        body: { 
+          action: "connectionState", 
+          instanceId: instance.id, 
+          userId: user.id 
+        },
       });
-      if (error) return "error";
-      const payload = data?.data as any;
-      const state =
-        (payload?.instance && payload.instance.state) ||
-        payload?.state ||
-        "disconnected";
+
+      if (error) {
+        console.error(`[InstanceTable] Error from evolution-proxy for ${instance.name}:`, error);
+        return "error";
+      }
+
+      console.log(`[InstanceTable] Response from evolution-proxy for ${instance.name}:`, data);
+
+      if (!data.success) {
+        console.error(`[InstanceTable] Non-success response for ${instance.name}:`, data);
+        return "error";
+      }
+
+      const payload = data.data as any;
+      const state = payload?.instance?.state || payload?.state || "disconnected";
+      
+      console.log(`[InstanceTable] Connection state for ${instance.name}: ${state}`);
       return String(state);
-    } catch {
+    } catch (err) {
+      console.error(`[InstanceTable] Exception checking connection for ${instance.name}:`, err);
       return "error";
     }
   }, [user?.id]);
 
   React.useEffect(() => {
     const checkAllConnections = async () => {
-      const states: Record<string, string> = {};
-      for (const instance of instances) {
-        const status = await checkConnectionStatus(instance);
-        states[instance.id!] = status;
+      if (!user?.id) {
+        console.log('[InstanceTable] Skipping connection checks - no user');
+        return;
       }
+
+      console.log(`[InstanceTable] Checking connections for ${instances.length} instances`);
+      const states: Record<string, string> = {};
+      
+      for (const instance of instances) {
+        if (instance.id) {
+          const status = await checkConnectionStatus(instance);
+          states[instance.id] = status;
+        }
+      }
+      
+      console.log('[InstanceTable] All connection states:', states);
       setConnectionStates(states);
     };
+
     if (instances.length > 0) {
       checkAllConnections();
     }
-  }, [instances, checkConnectionStatus]);
+  }, [instances, checkConnectionStatus, user?.id]);
 
   const getStatusBadge = (instanceId: string) => {
     const status = connectionStates[instanceId] || "unknown";
