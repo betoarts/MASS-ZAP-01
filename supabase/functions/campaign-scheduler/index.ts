@@ -13,7 +13,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Initialize Supabase client with service role key to bypass RLS
   const supabaseClient = createClient(
     // @ts-ignore
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -26,98 +25,79 @@ serve(async (req) => {
     }
   );
 
-  // Function to add a log entry (using the service role client)
   const addLog = async (campaignId: string, userId: string, event_type: string, message: string, metadata?: Record<string, any>) => {
     await supabaseClient
       .from('campaign_logs')
       .insert({
         user_id: userId,
         campaign_id: campaignId,
-        event_type: event_type,
-        message: message,
-        metadata: metadata,
+        event_type,
+        message,
+        metadata,
       });
   };
 
   try {
-    console.log('Campaign scheduler invoked.');
-
-    // Fetch campaigns that are scheduled and whose scheduled_at time has passed
     const { data: campaignsToRun, error: fetchError } = await supabaseClient
       .from('campaigns')
       .select('id, name, user_id, scheduled_at')
       .eq('status', 'scheduled')
-      .lte('scheduled_at', new Date().toISOString()); // scheduled_at <= now
+      .lte('scheduled_at', new Date().toISOString());
 
     if (fetchError) {
-      console.error('Error fetching scheduled campaigns:', fetchError.message);
-      return new Response(JSON.stringify({ error: `Error fetching scheduled campaigns: ${fetchError.message}` }), {
+      return new Response(JSON.stringify({ error: `Erro ao buscar campanhas agendadas: ${fetchError.message}` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
       });
     }
 
     if (!campaignsToRun || campaignsToRun.length === 0) {
-      console.log('No campaigns to run at this time.');
-      return new Response(JSON.stringify({ message: 'No campaigns to run.' }), {
+      return new Response(JSON.stringify({ message: 'Nenhuma campanha para executar agora.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       });
     }
 
-    console.log(`Found ${campaignsToRun.length} campaigns to run.`);
-
     for (const campaign of campaignsToRun) {
       if (!campaign.user_id) {
-        console.error(`Skipping campaign ${campaign.id} ("${campaign.name}") because user_id is missing.`);
-        // We cannot add a log to campaign_logs without a user_id, so we just log to console.
-        continue; // Skip to the next campaign
+        continue;
       }
 
       try {
-        // Update campaign status to 'running' before invoking send-campaign
         const { error: updateError } = await supabaseClient
           .from('campaigns')
           .update({ status: 'running', updated_at: new Date().toISOString() })
           .eq('id', campaign.id);
 
         if (updateError) {
-          console.error(`Error updating status for campaign ${campaign.id}:`, updateError.message);
-          await addLog(campaign.id, campaign.user_id, 'scheduler_error', `Failed to update status to 'running': ${updateError.message}`);
-          continue; // Skip to the next campaign
+          await addLog(campaign.id, campaign.user_id, 'scheduler_error', `Falha ao atualizar status para "em execução": ${updateError.message}`);
+          continue;
         }
 
-        await addLog(campaign.id, campaign.user_id, 'scheduler_started', `Campaign "${campaign.name}" status updated to 'running' by scheduler. Invoking send-campaign.`);
+        await addLog(campaign.id, campaign.user_id, 'scheduler_started', `Status da campanha "${campaign.name}" atualizado para "em execução" pelo agendador. Invocando send-campaign.`);
 
-        // Invoke the send-campaign Edge Function, passing the user_id
         const { data, error: invokeError } = await supabaseClient.functions.invoke('send-campaign', {
-          body: { campaignId: campaign.id, userId: campaign.user_id }, // Pass user_id here
-          // No headers needed for internal invocation if send-campaign uses service role key
+          body: { campaignId: campaign.id, userId: campaign.user_id },
         });
 
         if (invokeError) {
-          console.error(`Error invoking send-campaign for campaign ${campaign.id}:`, invokeError.message);
-          await addLog(campaign.id, campaign.user_id, 'scheduler_error', `Failed to invoke send-campaign: ${invokeError.message}`, { invoke_error: invokeError.message });
-          // Optionally, set campaign status to 'failed' if invocation fails
+          await addLog(campaign.id, campaign.user_id, 'scheduler_error', `Falha ao invocar send-campaign: ${invokeError.message}`, { invoke_error: invokeError.message });
           await supabaseClient.from('campaigns').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', campaign.id);
         } else {
-          console.log(`Successfully invoked send-campaign for campaign ${campaign.id}. Response:`, data);
-          await addLog(campaign.id, campaign.user_id, 'scheduler_invoked', `Successfully invoked send-campaign.`, { invoke_response: data });
+          await addLog(campaign.id, campaign.user_id, 'scheduler_invoked', `Função send-campaign invocada com sucesso.`, { invoke_response: data });
         }
       } catch (campaignProcessError: any) {
-        console.error(`Unexpected error processing campaign ${campaign.id}:`, campaignProcessError.message);
-        await addLog(campaign.id, campaign.user_id, 'scheduler_error', `Unexpected error during campaign processing: ${campaignProcessError.message}`, { error_details: campaignProcessError.message });
+        await addLog(campaign.id, campaign.user_id, 'scheduler_error', `Erro inesperado ao processar campanha: ${campaignProcessError.message}`, { error_details: campaignProcessError.message });
         await supabaseClient.from('campaigns').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', campaign.id);
       }
     }
 
-    return new Response(JSON.stringify({ message: `Scheduler finished. Processed ${campaignsToRun.length} campaigns.` }), {
+    return new Response(JSON.stringify({ message: `Agendador finalizado. Processadas ${campaignsToRun.length} campanha(s).` }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error: any) {
-    console.error('Global error in campaign scheduler:', error.message);
-    return new Response(JSON.stringify({ error: `Global scheduler error: ${error.message}` }), {
+    return new Response(JSON.stringify({ error: `Erro global no agendador: ${error.message}` }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });

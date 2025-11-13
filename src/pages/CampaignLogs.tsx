@@ -54,7 +54,7 @@ const CampaignLogs = () => {
   const getEventTypeBadge = (eventType: string) => {
     switch (eventType) {
       case 'campaign_received':
-        return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Recebida</Badge>;
+        return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Solicitação Recebida</Badge>;
       case 'campaign_started':
         return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Iniciada</Badge>;
       case 'message_sent':
@@ -71,6 +71,20 @@ const CampaignLogs = () => {
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pausada</Badge>;
       case 'campaign_status_update':
         return <Badge variant="secondary">Status Atualizado</Badge>;
+      case 'campaign_stopped':
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Parada</Badge>;
+      case 'campaign_completed_after_stop':
+        return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Concluída após Parada</Badge>;
+      case 'campaign_aborted':
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Processo Abortado</Badge>;
+      case 'scheduler_started':
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Agendador Iniciou</Badge>;
+      case 'scheduler_invoked':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Agendador Invocou Envio</Badge>;
+      case 'scheduler_error':
+        return <Badge variant="destructive">Erro do Agendador</Badge>;
+      case 'error':
+        return <Badge variant="destructive">Erro</Badge>;
       default:
         return <Badge variant="secondary">{eventType}</Badge>;
     }
@@ -81,7 +95,7 @@ const CampaignLogs = () => {
   }
 
   if (!campaign) {
-    return null; // Should redirect by now if campaignId is invalid
+    return null;
   }
 
   return (
@@ -108,7 +122,7 @@ const CampaignLogs = () => {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[180px]">Data/Hora</TableHead>
-                <TableHead className="w-[150px]">Tipo de Evento</TableHead>
+                <TableHead className="w-[150px]">Tipo</TableHead>
                 <TableHead>Mensagem</TableHead>
                 <TableHead className="w-[100px] text-right">Detalhes</TableHead>
               </TableRow>

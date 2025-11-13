@@ -6,7 +6,7 @@ import { DashboardStatCard } from "@/components/dashboard/DashboardStatCard";
 import { getInstances } from "@/lib/storage";
 import { getContactLists } from "@/lib/contact-storage";
 import { getCampaigns } from "@/lib/campaign-storage";
-import { getAllCampaignLogs, CampaignLog, getMessageSentCount } from "@/lib/log-storage";
+import { getAllCampaignLogs, getMessageSentCount } from "@/lib/log-storage";
 import { getCustomers } from "@/lib/crm-storage";
 import { Settings, Users, Send, Briefcase, MessageCircle } from "lucide-react";
 import {
@@ -73,23 +73,11 @@ const Dashboard = () => {
   const getEventTypeBadge = (eventType: string) => {
     switch (eventType) {
       case "campaign_started":
-        return (
-          <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
-            Campanha Iniciada
-          </Badge>
-        );
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Campanha Iniciada</Badge>;
       case "message_sent":
-        return (
-          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-            Mensagem Enviada
-          </Badge>
-        );
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Mensagem Enviada</Badge>;
       case "campaign_completed":
-        return (
-          <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">
-            Campanha Concluída
-          </Badge>
-        );
+        return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Campanha Concluída</Badge>;
       case "campaign_failed":
         return <Badge variant="destructive">Falha na Campanha</Badge>;
       case "message_failed":
@@ -97,11 +85,43 @@ const Dashboard = () => {
       case "message_error":
         return <Badge variant="destructive">Erro de Mensagem</Badge>;
       case "campaign_paused":
-        return (
-          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-            Campanha Pausada
-          </Badge>
-        );
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Campanha Pausada</Badge>;
+      case "campaign_status_update":
+        return <Badge variant="secondary">Status Atualizado</Badge>;
+      case "campaign_received":
+        return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Solicitação Recebida</Badge>;
+      case "campaign_stopped":
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Campanha Parada</Badge>;
+      case "campaign_completed_after_stop":
+        return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Concluída após Parada</Badge>;
+      case "scheduler_started":
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Agendador Iniciou</Badge>;
+      case "scheduler_invoked":
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Agendador Invocou Envio</Badge>;
+      case "scheduler_error":
+        return <Badge variant="destructive">Erro do Agendador</Badge>;
+      case "webhook_received":
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Webhook Recebido</Badge>;
+      case "webhook_filtered":
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Webhook Filtrado</Badge>;
+      case "webhook_error":
+        return <Badge variant="destructive">Erro de Webhook</Badge>;
+      case "webhook_auth_error":
+        return <Badge variant="destructive">Erro de Autenticação do Webhook</Badge>;
+      case "contact_added":
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Contato Adicionado</Badge>;
+      case "contact_updated":
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Contato Atualizado</Badge>;
+      case "proposal_sent":
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Proposta Enviada</Badge>;
+      case "proposal_failed":
+        return <Badge variant="destructive">Falha na Proposta</Badge>;
+      case "proposal_error":
+        return <Badge variant="destructive">Erro ao Enviar Proposta</Badge>;
+      case "proposal_failed_global":
+        return <Badge variant="destructive">Falha Global da Proposta</Badge>;
+      case "error":
+        return <Badge variant="destructive">Erro</Badge>;
       default:
         return <Badge variant="secondary">{eventType}</Badge>;
     }
@@ -176,7 +196,7 @@ const Dashboard = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[180px]">Data/Hora</TableHead>
-                  <TableHead className="w-[150px]">Tipo de Evento</TableHead>
+                  <TableHead className="w-[150px]">Tipo</TableHead>
                   <TableHead>Mensagem</TableHead>
                   <TableHead className="text-right">Campanha</TableHead>
                 </TableRow>
