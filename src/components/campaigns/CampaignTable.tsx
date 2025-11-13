@@ -18,7 +18,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/components/auth/SessionContextProvider";
@@ -66,8 +65,6 @@ export const CampaignTable: React.FC<CampaignTableProps> = ({
         return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Concluída</Badge>;
       case 'failed':
         return <Badge variant="destructive">Falha</Badge>;
-      case 'stopped':
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Parada</Badge>;
       default:
         return <Badge variant="secondary">Desconhecido</Badge>;
     }
@@ -88,12 +85,11 @@ export const CampaignTable: React.FC<CampaignTableProps> = ({
         return;
       }
 
-      // Usamos mapCampaignToFormData para garantir que todos os campos necessários para a atualização estejam presentes
       const formData = mapCampaignToFormData(campaign);
       const updatedCampaign = await updateCampaign(user.id, { ...formData, id: campaign.id, status: 'scheduled' });
       if (updatedCampaign) {
         toast.success(`Campanha "${campaign.name}" agendada com sucesso para ${format(scheduledTime, "PPP HH:mm", { locale: ptBR })}.`, { id: loadingToastId });
-        onCampaignStatusChange(); // Refresh campaign list
+        onCampaignStatusChange();
       } else {
         toast.error("Falha ao agendar campanha.", { id: loadingToastId });
       }
@@ -110,7 +106,8 @@ export const CampaignTable: React.FC<CampaignTableProps> = ({
     }
     const loadingToastId = toast.loading(`Pausando campanha "${campaign.name}"...`);
     try {
-      const updatedCampaign = await updateCampaignStatus(campaign.id, 'stopped');
+      // Pausar = voltar para rascunho
+      const updatedCampaign = await updateCampaignStatus(campaign.id, 'draft');
       if (updatedCampaign) {
         toast.success(`Campanha "${campaign.name}" pausada com sucesso.`, { id: loadingToastId });
         onCampaignStatusChange();
@@ -130,7 +127,8 @@ export const CampaignTable: React.FC<CampaignTableProps> = ({
     }
     const loadingToastId = toast.loading(`Parando campanha "${campaign.name}"...`);
     try {
-      const updatedCampaign = await updateCampaignStatus(campaign.id, 'stopped');
+      // Parar = marcar como falha (encerra o envio e impede continuação)
+      const updatedCampaign = await updateCampaignStatus(campaign.id, 'failed');
       if (updatedCampaign) {
         toast.success(`Campanha "${campaign.name}" parada com sucesso.`, { id: loadingToastId });
         onCampaignStatusChange();
@@ -206,7 +204,7 @@ export const CampaignTable: React.FC<CampaignTableProps> = ({
                     </TooltipTrigger>
                     <TooltipContent>Editar Campanha</TooltipContent>
                   </Tooltip>
-                  {(campaign.status === 'draft' || campaign.status === 'completed' || campaign.status === 'failed' || campaign.status === 'stopped') ? (
+                  {(campaign.status === 'draft' || campaign.status === 'completed' || campaign.status === 'failed') ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
