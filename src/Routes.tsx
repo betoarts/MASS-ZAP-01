@@ -8,10 +8,11 @@ import ContactDetails from "./pages/ContactDetails";
 import Logs from "./pages/Logs";
 import CampaignLogs from "./pages/CampaignLogs";
 import ProfilePage from "./pages/Profile";
-import CRM from "./pages/CRM"; // Importar a nova página CRM
+import CRM from "./pages/CRM";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
-import { SessionContextProvider, useSession } from "./components/auth/SessionContextProvider";
+import WebhookConfig from "./pages/WebhookConfig";
+import { useSession } from "./components/auth/SessionContextProvider";
 import React from "react";
 
 // ProtectedRoute component to guard routes
@@ -104,7 +105,7 @@ export const Routes = () => (
       }
     />
     <Route
-      path="/profile" // New route for Profile page
+      path="/profile"
       element={
         <ProtectedRoute>
           <MainLayout>
@@ -114,11 +115,21 @@ export const Routes = () => (
       }
     />
     <Route
-      path="/crm" // Nova rota para a página CRM
+      path="/crm"
       element={
         <ProtectedRoute>
           <MainLayout>
             <CRM />
+          </MainLayout>
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/webhooks"
+      element={
+        <ProtectedRoute>
+          <MainLayout>
+            <WebhookConfig />
           </MainLayout>
         </ProtectedRoute>
       }

@@ -19,7 +19,8 @@ import {
   UserCircle,
   LogOut,
   Briefcase,
-  MessageCircle, // Ícone do WhatsApp
+  MessageCircle,
+  Webhook,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -59,6 +60,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ onLinkClick }) => {
       icon: Briefcase,
     },
     {
+      title: "Webhooks",
+      href: "/webhooks",
+      icon: Webhook,
+    },
+    {
       title: "Logs",
       href: "/logs",
       icon: FileText,
@@ -83,7 +89,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ onLinkClick }) => {
   };
 
   const handleSupportClick = () => {
-    // Link do WhatsApp com mensagem pré-preenchida
     const whatsappLink = "https://wa.me/5554991680204?text=Preciso%20de%20ajuda%20para%20conectar%20uma%20instancia%20ou%20criar";
     window.open(whatsappLink, "_blank", "noopener,noreferrer");
     onLinkClick?.();
