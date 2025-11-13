@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Search, Bell } from "lucide-react";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -16,6 +16,7 @@ export const HeaderBar: React.FC = () => {
   const location = useLocation();
 
   const [firstName, setFirstName] = React.useState<string>("");
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
 
   const deriveFirstNameFromEmail = (email?: string | null) => {
     if (!email) return "";
@@ -27,20 +28,33 @@ export const HeaderBar: React.FC = () => {
 
   React.useEffect(() => {
     let isMounted = true;
-    const loadFirstName = async () => {
+    const loadHeaderData = async () => {
       if (!user) {
-        if (isMounted) setFirstName("");
+        if (isMounted) {
+          setFirstName("");
+          setAvatarUrl(null);
+        }
         return;
       }
       const profile = await getProfile(user.id);
-      const metaFirst = (user.user_metadata as any)?.first_name as string | undefined;
-      const resolved =
+      const meta = (user.user_metadata as any) || {};
+      const metaFirst = (meta?.first_name as string | undefined)?.trim();
+      const resolvedFirst =
         profile?.first_name?.trim() ||
-        (metaFirst ? metaFirst.trim() : "") ||
+        (metaFirst ? metaFirst : "") ||
         deriveFirstNameFromEmail(user.email);
-      if (isMounted) setFirstName(resolved);
+
+      const resolvedAvatar =
+        (profile?.avatar_url?.trim?.() || "") ||
+        (meta?.avatar_url?.trim?.() || "") ||
+        null;
+
+      if (isMounted) {
+        setFirstName(resolvedFirst);
+        setAvatarUrl(resolvedAvatar);
+      }
     };
-    loadFirstName();
+    loadHeaderData();
     return () => {
       isMounted = false;
     };
@@ -105,6 +119,9 @@ export const HeaderBar: React.FC = () => {
             aria-label="Perfil"
           >
             <Avatar className="h-9 w-9">
+              {avatarUrl ? (
+                <AvatarImage src={avatarUrl} alt={firstName || user?.email || "Avatar"} />
+              ) : null}
               <AvatarFallback className="bg-gradient-to-br from-purple-500 to-indigo-500 text-white">
                 {initials}
               </AvatarFallback>
