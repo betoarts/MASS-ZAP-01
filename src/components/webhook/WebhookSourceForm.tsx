@@ -12,7 +12,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription, // ✅ Adicionado import faltante
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,6 +30,7 @@ const formSchema = z.object({
   source_type: z.string().min(1, "Selecione um tipo de fonte"),
   field_mapping: z.string().min(10, "Mapeamento de campos é obrigatório"),
   filters: z.string().optional(),
+  api_key: z.string().min(1, "A chave da API é obrigatória. Gere uma aleatória se não tiver."), // Adicionado
 });
 
 interface WebhookSourceFormProps {
@@ -45,6 +46,7 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
       source_type: initialData?.source_type || "",
       field_mapping: initialData?.field_mapping ? JSON.stringify(initialData.field_mapping, null, 2) : "",
       filters: initialData?.filters ? JSON.stringify(initialData.filters, null, 2) : "",
+      api_key: initialData?.api_key || "", // Adicionado
     },
   });
 
@@ -58,6 +60,7 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
         source_type: values.source_type as WebhookSource['source_type'],
         field_mapping: fieldMapping,
         filters: filters,
+        api_key: values.api_key, // Adicionado
       });
     } catch (error) {
       form.setError("field_mapping", { message: "JSON inválido no mapeamento de campos" });
@@ -111,6 +114,23 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
 
         <FormField
           control={form.control}
+          name="api_key"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Chave da API</FormLabel>
+              <FormControl>
+                <Input placeholder="Sua chave de API secreta" {...field} />
+              </FormControl>
+              <FormDescription>
+                Use esta chave na URL do webhook para autenticação.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
           name="field_mapping"
           render={({ field }) => (
             <FormItem>
@@ -123,7 +143,7 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
                   {...field}
                 />
               </FormControl>
-              <FormDescription> // ✅ Agora funciona!
+              <FormDescription>
                 Mapeie os campos do seu CRM para os campos do MassZapp
               </FormDescription>
               <FormMessage />
@@ -145,7 +165,7 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
                   {...field}
                 />
               </FormControl>
-              <FormDescription> // ✅ Agora funciona!
+              <FormDescription>
                 Filtros para processar apenas contatos específicos
               </FormDescription>
               <FormMessage />

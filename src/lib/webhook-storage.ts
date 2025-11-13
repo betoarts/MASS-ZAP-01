@@ -7,6 +7,7 @@ export interface WebhookSource {
   source_type: 'hubspot' | 'salesforce' | 'pipedrive' | 'universal';
   field_mapping: Record<string, string>;
   filters?: Record<string, any>;
+  api_key: string; // Adicionado
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +35,7 @@ export const createWebhookSource = async (userId: string, source: Omit<WebhookSo
       source_type: source.source_type,
       field_mapping: source.field_mapping,
       filters: source.filters,
+      api_key: source.api_key, // Adicionado
     })
     .select()
     .single();
@@ -53,6 +55,7 @@ export const updateWebhookSource = async (userId: string, source: Omit<WebhookSo
       source_type: source.source_type,
       field_mapping: source.field_mapping,
       filters: source.filters,
+      api_key: source.api_key, // Adicionado
       updated_at: new Date().toISOString(),
     })
     .eq("id", source.id)
