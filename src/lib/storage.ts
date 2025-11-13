@@ -10,6 +10,7 @@ export interface Instance {
 }
 
 export const getInstances = async (userId: string): Promise<Instance[]> => {
+  console.log(`[Storage] Fetching instances for user: ${userId}`);
   const { data, error } = await supabase
     .from("instances")
     .select("*")
@@ -19,6 +20,8 @@ export const getInstances = async (userId: string): Promise<Instance[]> => {
     console.error("Error fetching instances:", error);
     return [];
   }
+  
+  console.log(`[Storage] Found ${data?.length || 0} instances for user ${userId}`);
   // Explicitly map snake_case from DB to camelCase in interface
   return data.map(dbInstance => ({
     id: dbInstance.id,
@@ -31,6 +34,7 @@ export const getInstances = async (userId: string): Promise<Instance[]> => {
 };
 
 export const saveInstance = async (userId: string, instance: Omit<Instance, 'user_id'>): Promise<Instance | null> => {
+  console.log(`[Storage] Saving instance for user: ${userId}`, instance);
   if (instance.id) {
     // Update existing instance
     const { data, error } = await supabase
@@ -91,6 +95,7 @@ export const saveInstance = async (userId: string, instance: Omit<Instance, 'use
 };
 
 export const getInstanceById = async (id: string, userId: string): Promise<Instance | null> => {
+  console.log(`[Storage] Fetching instance ${id} for user: ${userId}`);
   const { data, error } = await supabase
     .from("instances")
     .select("*")
@@ -102,6 +107,8 @@ export const getInstanceById = async (id: string, userId: string): Promise<Insta
     console.error("Error fetching instance by ID:", error);
     return null;
   }
+  
+  console.log(`[Storage] Found instance: ${data ? 'yes' : 'no'} for user ${userId}`);
   // Explicitly map snake_case from DB to camelCase in interface
   return data ? {
     id: data.id,
@@ -114,6 +121,7 @@ export const getInstanceById = async (id: string, userId: string): Promise<Insta
 };
 
 export const deleteInstance = async (id: string, userId: string): Promise<boolean> => {
+  console.log(`[Storage] Deleting instance ${id} for user: ${userId}`);
   const { error } = await supabase
     .from("instances")
     .delete()
@@ -124,5 +132,7 @@ export const deleteInstance = async (id: string, userId: string): Promise<boolea
     console.error("Error deleting instance:", error);
     return false;
   }
+  
+  console.log(`[Storage] Successfully deleted instance ${id} for user ${userId}`);
   return true;
 };
