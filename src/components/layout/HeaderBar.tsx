@@ -8,11 +8,43 @@ import { Search, Bell } from "lucide-react";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { getProfile } from "@/lib/profile-storage";
 
 export const HeaderBar: React.FC = () => {
   const { user } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [firstName, setFirstName] = React.useState<string>("");
+
+  const deriveFirstNameFromEmail = (email?: string | null) => {
+    if (!email) return "";
+    const namePart = email.split("@")[0];
+    const cleaned = namePart.replace(/[._-]+/g, " ").trim();
+    const first = cleaned.split(" ")[0] || "";
+    return first ? first.charAt(0).toUpperCase() + first.slice(1) : "";
+  };
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadFirstName = async () => {
+      if (!user) {
+        if (isMounted) setFirstName("");
+        return;
+      }
+      const profile = await getProfile(user.id);
+      const metaFirst = (user.user_metadata as any)?.first_name as string | undefined;
+      const resolved =
+        profile?.first_name?.trim() ||
+        (metaFirst ? metaFirst.trim() : "") ||
+        deriveFirstNameFromEmail(user.email);
+      if (isMounted) setFirstName(resolved);
+    };
+    loadFirstName();
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   const initials = React.useMemo(() => {
     const email = user?.email ?? "";
@@ -24,7 +56,6 @@ export const HeaderBar: React.FC = () => {
   }, [user?.email]);
 
   const pageTitle = React.useMemo(() => {
-    // Títulos mínimos por rota (sem alterar rotas/menus)
     if (location.pathname.startsWith("/instances")) return "Instâncias";
     if (location.pathname.startsWith("/contacts/")) return "Contatos da Lista";
     if (location.pathname.startsWith("/contacts")) return "Contatos";
@@ -41,7 +72,9 @@ export const HeaderBar: React.FC = () => {
       <div className="rounded-2xl bg-white/70 dark:bg-white/5 backdrop-blur supports-[backdrop-filter]:backdrop-blur border border-purple-100/70 dark:border-white/10 px-4 sm:px-6 py-3 shadow-[0_2px_12px_rgba(89,63,255,0.08)]">
         <div className="flex items-center gap-3">
           <div className="hidden sm:block">
-            <div className="text-sm text-purple-700/80 dark:text-purple-200">Olá,</div>
+            <div className="text-sm text-purple-700/80 dark:text-purple-200">
+              {firstName ? `Olá, ${firstName}` : "Olá"}
+            </div>
             <div className="font-semibold text-purple-900 dark:text-purple-100">{pageTitle}</div>
           </div>
 
