@@ -70,10 +70,17 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
     try {
       const res = await callProxy("connectionState");
       if (!res.success) {
-        throw new Error(`Status ${res.status}`);
+        console.error("[QR] evolution-proxy connectionState non-OK:", res);
+        const details =
+          typeof res.data === "string"
+            ? res.data
+            : res.data?.message || res.data?.error || JSON.stringify(res.data);
+        toast.error("Servidor Evolution indisponível", {
+          description: `Status ${res.status}. ${details ?? ""}`.trim(),
+        });
+        return "disconnected";
       }
       const payload = res.data as ConnectionStateResponse;
-      // Algumas versões retornam em instance.state, outras em state
       const state =
         (payload.instance && (payload.instance as any).state) ||
         (payload as any).state ||
@@ -90,8 +97,18 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
     try {
       const res = await callProxy("connect");
       if (!res.success) {
-        throw new Error(`Status ${res.status}`);
+        console.error("[QR] evolution-proxy connect non-OK:", res);
+        const details =
+          typeof res.data === "string"
+            ? res.data
+            : res.data?.message || res.data?.error || JSON.stringify(res.data);
+        toast.error("Não foi possível gerar o QR Code", {
+          description: `Status ${res.status}. ${details ?? ""}`.trim(),
+        });
+        setConnectionState("error");
+        return;
       }
+
       const data = res.data as QRCodeResponse;
 
       if ((data as any).base64) {
@@ -99,7 +116,6 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
       } else if ((data as any).code) {
         setQrCode(`data:image/png;base64,${(data as any).code}`);
       } else {
-        // Procurar possíveis campos aninhados
         const maybeBase64 = (res.data && (res.data as any).qr) || (res.data && (res.data as any).image);
         if (maybeBase64) {
           setQrCode(String(maybeBase64));

@@ -74,7 +74,6 @@ serve(async (req) => {
       instanceName = data.instance_name
       apiKey = data.api_key
     } else {
-      // uso direto (formulário antes de salvar)
       baseUrl = body.url
       instanceName = body.instanceName
       apiKey = body.apiKey
@@ -88,6 +87,7 @@ serve(async (req) => {
 
     const headers: HeadersInit = {
       "Content-Type": "application/json",
+      "Accept": "application/json",
       apikey: apiKey,
     }
 
@@ -106,7 +106,6 @@ serve(async (req) => {
     const res = await fetch(targetUrl, { method: "GET", headers })
     const text = await res.text()
 
-    // tentar parsear json, mas se não der, devolve texto
     let data: unknown
     try {
       data = JSON.parse(text)
