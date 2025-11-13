@@ -24,13 +24,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { WebhookSource } from "@/lib/webhook-storage";
+import { ContactList, getContactLists } from "@/lib/contact-storage";
 
 const formSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   source_type: z.string().min(1, "Selecione um tipo de fonte"),
+  target_list_id: z.string().min(1, "Selecione a lista de contatos que receberá os leads"),
   field_mapping: z.string().min(10, "Mapeamento de campos é obrigatório"),
   filters: z.string().optional(),
-  api_key: z.string().optional().or(z.literal("")), // opcional
+  api_key: z.string().optional().or(z.literal("")),
 });
 
 interface WebhookSourceFormProps {
@@ -39,14 +41,21 @@ interface WebhookSourceFormProps {
 }
 
 export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialData, onSave }) => {
+  const [lists, setLists] = React.useState<ContactList[]>([]);
+
+  React.useEffect(() => {
+    getContactLists().then(setLists);
+  }, []);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: initialData?.name || "",
       source_type: initialData?.source_type || "",
+      target_list_id: initialData?.target_list_id || "",
       field_mapping: initialData?.field_mapping ? JSON.stringify(initialData.field_mapping, null, 2) : "",
       filters: initialData?.filters ? JSON.stringify(initialData.filters, null, 2) : "",
-      api_key: initialData?.api_key ?? "", // pode ser vazio
+      api_key: initialData?.api_key ?? "",
     },
   });
 
@@ -58,9 +67,10 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
       onSave({
         name: values.name,
         source_type: values.source_type as WebhookSource['source_type'],
+        target_list_id: values.target_list_id,
         field_mapping: fieldMapping,
         filters: filters,
-        api_key: (values.api_key ?? "").trim(), // enviar vazio quando não houver
+        api_key: (values.api_key ?? "").trim(),
       });
     } catch (error) {
       form.setError("field_mapping", { message: "JSON inválido no mapeamento de campos" });
@@ -107,6 +117,38 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
                   <SelectItem value="rdstation">RD Station</SelectItem>
                 </SelectContent>
               </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="target_list_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Lista de Contatos de Destino</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a lista que receberá os contatos" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {lists.length === 0 ? (
+                    <SelectItem value="no-list" disabled>Nenhuma lista disponível</SelectItem>
+                  ) : (
+                    lists.map((list) => (
+                      <SelectItem key={list.id} value={list.id}>
+                        {list.name} ({list.contacts.length} contatos)
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Todos os contatos recebidos por esse webhook serão adicionados/atualizados nesta lista.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

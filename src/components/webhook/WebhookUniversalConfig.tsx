@@ -71,6 +71,14 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
     }
   }, [user, selectedList, selectedSource]);
 
+  // Se a fonte selecionada tiver uma lista alvo configurada, preencher automaticamente
+  React.useEffect(() => {
+    const src = webhookSources.find(s => s.id === selectedSource);
+    if (src?.target_list_id) {
+      setSelectedList(src.target_list_id);
+    }
+  }, [selectedSource, webhookSources]);
+
   React.useEffect(() => {
     if (selectedList && user && selectedSource) {
       const selectedWebhookSource = webhookSources.find(source => source.id === selectedSource);
@@ -78,9 +86,9 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
       if (selectedWebhookSource) {
         const key = (selectedWebhookSource.api_key ?? "").trim();
         const qp = new URLSearchParams({
-          source: user.id,           // userId
-          source_id: selectedSource, // id da fonte de webhook
-          list_id: selectedList,     // id da lista de contatos
+          source: user.id,
+          source_id: selectedSource,
+          list_id: selectedList,
         });
         if (key.length > 0) {
           qp.set("api_key", key);
@@ -137,13 +145,6 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
     }
   };
 
-  const fieldExamples = [
-    { icon: Phone, label: "Telefone", examples: ["phone", "mobile", "telefone", "celular", "whatsapp"] },
-    { icon: User, label: "Nome", examples: ["name", "nome", "fullname", "firstName", "lastName"] },
-    { icon: Mail, label: "Email", examples: ["email", "mail", "emailaddress", "email_address"] },
-    { icon: Building, label: "Empresa", examples: ["company", "empresa", "organization", "account"] }
-  ];
-
   return (
     <div className="space-y-6">
       <Card>
@@ -176,7 +177,7 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
               </SelectContent>
             </Select>
             <p className="text-sm text-muted-foreground">
-              Se a fonte tiver chave de API, a URL incluirá api_key; se estiver vazia, a URL não exigirá esse parâmetro.
+              A fonte pode ter uma lista alvo associada; se houver, a URL já virá preenchida com ela.
             </p>
           </div>
 
@@ -312,20 +313,19 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
           <div className="space-y-2">
             <h4 className="font-medium">1. Crie uma Fonte de Webhook</h4>
             <p className="text-sm text-muted-foreground">
-              Clique em "Adicionar Fonte" e defina um nome. A chave de API é opcional.
+              Defina um nome, tipo, lista de destino e (opcional) chave de API.
             </p>
           </div>
           <div className="space-y-2">
             <h4 className="font-medium">2. Selecione a Fonte e a Lista</h4>
             <p className="text-sm text-muted-foreground">
-              Escolha a fonte de webhook e a lista de contatos para onde os dados serão enviados.
+              A lista pode ser preenchida automaticamente a partir da fonte selecionada.
             </p>
           </div>
           <div className="space-y-2">
             <h4 className="font-medium">3. Copie a URL</h4>
             <p className="text-sm text-muted-foreground">
               A URL inclui source (seu userId), source_id (id da fonte) e list_id (id da lista).
-              Se a fonte tiver chave, a URL incluirá api_key; caso contrário, será omitida.
             </p>
           </div>
         </CardContent>

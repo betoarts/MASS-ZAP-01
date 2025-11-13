@@ -7,7 +7,8 @@ export interface WebhookSource {
   source_type: 'hubspot' | 'salesforce' | 'pipedrive' | 'universal';
   field_mapping: Record<string, string>;
   filters?: Record<string, any>;
-  api_key?: string; // agora opcional (pode ser vazio)
+  api_key?: string;
+  target_list_id?: string; // nova coluna: lista de contatos alvo
   created_at: string;
   updated_at: string;
 }
@@ -33,7 +34,8 @@ export const createWebhookSource = async (userId: string, source: Omit<WebhookSo
     source_type: source.source_type,
     field_mapping: source.field_mapping,
     filters: source.filters,
-    api_key: (source.api_key ?? "").trim(), // salva vazio quando não fornecida
+    api_key: (source.api_key ?? "").trim(),
+    target_list_id: source.target_list_id ?? null,
   };
 
   const { data, error } = await supabase
@@ -58,9 +60,11 @@ export const updateWebhookSource = async (userId: string, source: Omit<WebhookSo
     updated_at: new Date().toISOString(),
   };
 
-  // Se api_key vier definida (inclui string vazia), atualiza; se for undefined, mantém a atual
   if (typeof source.api_key !== "undefined") {
     updateData.api_key = (source.api_key ?? "").trim();
+  }
+  if (typeof source.target_list_id !== "undefined") {
+    updateData.target_list_id = source.target_list_id ?? null;
   }
 
   const { data, error } = await supabase
