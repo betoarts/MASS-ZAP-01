@@ -18,6 +18,7 @@ import { Instance } from "@/lib/storage";
 import { QrCode, Wifi, WifiOff } from "lucide-react";
 import { InstanceQRConnection } from "./InstanceQRConnection";
 import { useSession } from "@/components/auth/SessionContextProvider";
+import { supabase } from "@/integrations/supabase/client";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -55,35 +56,34 @@ export const InstanceForm: React.FC<InstanceFormProps> = ({ initialData, onSave 
     },
   });
 
-  // Função para verificar status de conexão
   const checkConnectionStatus = React.useCallback(async () => {
     const currentData = form.getValues();
     if (currentData.url && currentData.instanceName && currentData.apiKey) {
       try {
-        const response = await fetch(
-          `${currentData.url}/instance/connectionState/${currentData.instanceName}`,
-          {
-            headers: {
-              "apikey": currentData.apiKey,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          setConnectionStatus(data.instance?.state || "disconnected");
-        } else {
+        const { data, error } = await supabase.functions.invoke("evolution-proxy", {
+          body: {
+            action: "connectionState",
+            url: currentData.url,
+            instanceName: currentData.instanceName,
+            apiKey: currentData.apiKey,
+          },
+        });
+        if (error) {
           setConnectionStatus("error");
+          return;
         }
-      } catch (error) {
-        console.error("Error checking connection status:", error);
+        const payload = data?.data as any;
+        const state =
+          (payload?.instance && payload.instance.state) ||
+          payload?.state ||
+          "disconnected";
+        setConnectionStatus(String(state));
+      } catch {
         setConnectionStatus("error");
       }
     }
   }, [form]);
 
-  // Verificar status quando o formulário é carregado com dados existentes
   React.useEffect(() => {
     if (initialData && user) {
       checkConnectionStatus();
@@ -177,7 +177,6 @@ export const InstanceForm: React.FC<InstanceFormProps> = ({ initialData, onSave 
             )}
           />
 
-          {/* Status de Conexão e Botão QR Code */}
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center space-x-2">
               {getConnectionIcon()}
@@ -201,7 +200,6 @@ export const InstanceForm: React.FC<InstanceFormProps> = ({ initialData, onSave 
         </form>
       </Form>
 
-      {/* Diálogo de Conexão QR Code */}
       {user && (
         <InstanceQRConnection
           isOpen={isQRDialogOpen}

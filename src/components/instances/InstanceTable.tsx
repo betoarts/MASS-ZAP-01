@@ -18,6 +18,7 @@ import { InstanceQRConnection } from "./InstanceQRConnection";
 import { InstanceConfigExport } from "./InstanceConfigExport";
 import { toast } from "sonner";
 import { useSession } from "@/components/auth/SessionContextProvider";
+import { supabase } from "@/integrations/supabase/client";
 
 interface InstanceTableProps {
   instances: Instance[];
@@ -34,43 +35,33 @@ export const InstanceTable: React.FC<InstanceTableProps> = ({ instances, onEdit,
   const [importDialogOpen, setImportDialogOpen] = React.useState(false);
   const [selectedInstanceForImport, setSelectedInstanceForImport] = React.useState<Instance | null>(null);
 
-  // Função para verificar status de conexão de uma instância
   const checkConnectionStatus = React.useCallback(async (instance: Instance) => {
     try {
-      const response = await fetch(
-        `${instance.url}/instance/connectionState/${instance.instanceName}`,
-        {
-          headers: {
-            "apikey": instance.apiKey,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.instance?.state || "disconnected";
-      }
-      return "disconnected";
-    } catch (error) {
-      console.error(`Error checking connection status for ${instance.name}:`, error);
+      if (!user?.id || !instance.id) return "unknown";
+      const { data, error } = await supabase.functions.invoke("evolution-proxy", {
+        body: { action: "connectionState", instanceId: instance.id, userId: user.id },
+      });
+      if (error) return "error";
+      const payload = data?.data as any;
+      const state =
+        (payload?.instance && payload.instance.state) ||
+        payload?.state ||
+        "disconnected";
+      return String(state);
+    } catch {
       return "error";
     }
-  }, []);
+  }, [user?.id]);
 
-  // Verificar status de todas as instâncias quando a lista mudar
   React.useEffect(() => {
     const checkAllConnections = async () => {
       const states: Record<string, string> = {};
-      
       for (const instance of instances) {
         const status = await checkConnectionStatus(instance);
         states[instance.id!] = status;
       }
-      
       setConnectionStates(states);
     };
-
     if (instances.length > 0) {
       checkAllConnections();
     }
@@ -78,7 +69,6 @@ export const InstanceTable: React.FC<InstanceTableProps> = ({ instances, onEdit,
 
   const getStatusBadge = (instanceId: string) => {
     const status = connectionStates[instanceId] || "unknown";
-    
     switch (status) {
       case "open":
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Conectado</Badge>;
@@ -95,7 +85,6 @@ export const InstanceTable: React.FC<InstanceTableProps> = ({ instances, onEdit,
 
   const getStatusIcon = (instanceId: string) => {
     const status = connectionStates[instanceId] || "unknown";
-    
     switch (status) {
       case "open":
         return (
@@ -251,7 +240,6 @@ export const InstanceTable: React.FC<InstanceTableProps> = ({ instances, onEdit,
         </Table>
       </div>
 
-      {/* Diálogos */}
       {qrDialogInstance && (
         <InstanceQRConnection
           isOpen={!!qrDialogInstance}

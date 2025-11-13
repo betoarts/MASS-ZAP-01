@@ -14,11 +14,13 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, QrCode, WifiOff, Wifi, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Instance } from "@/lib/storage";
+import { supabase } from "@/integrations/supabase/client";
+import { useSession } from "@/components/auth/SessionContextProvider";
 
 interface QRCodeResponse {
   pairingCode?: string;
   code?: string;
-  base64?: string; // Adicionando campo base64
+  base64?: string;
   count?: number;
 }
 
@@ -27,6 +29,7 @@ interface ConnectionStateResponse {
     instanceName: string;
     state: string;
   };
+  state?: string;
 }
 
 interface InstanceQRConnectionProps {
@@ -40,36 +43,42 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
   onOpenChange,
   instance,
 }) => {
+  const { user } = useSession();
   const [qrCode, setQrCode] = React.useState<string>("");
   const [connectionState, setConnectionState] = React.useState<string>("disconnected");
   const [isLoading, setIsLoading] = React.useState(false);
   const [isConnecting, setIsConnecting] = React.useState(false);
   const pollingRef = React.useRef<NodeJS.Timeout | null>(null);
 
+  const callProxy = React.useCallback(
+    async (action: "connectionState" | "connect") => {
+      const hasPersistedId = !!instance.id && !!user?.id;
+      const body = hasPersistedId
+        ? { action, instanceId: instance.id as string, userId: user!.id }
+        : { action, url: instance.url, instanceName: instance.instanceName, apiKey: instance.apiKey };
+
+      const { data, error } = await supabase.functions.invoke("evolution-proxy", { body });
+      if (error) {
+        throw new Error(error.message);
+      }
+      return data as { success: boolean; status: number; data: any };
+    },
+    [instance, user]
+  );
+
   const getConnectionStatus = async () => {
     try {
-      console.log(`[QR] Checking connection status for ${instance.instanceName}...`);
-      const response = await fetch(
-        `${instance.url}/instance/connectionState/${instance.instanceName}`,
-        {
-          headers: {
-            "apikey": instance.apiKey,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      console.log(`[QR] Connection status response:`, response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[QR] Failed to get connection status: ${response.status} - ${errorText}`);
-        throw new Error(`Failed to get connection status: ${response.status}`);
+      const res = await callProxy("connectionState");
+      if (!res.success) {
+        throw new Error(`Status ${res.status}`);
       }
-
-      const data: ConnectionStateResponse = await response.json();
-      console.log(`[QR] Connection status data:`, data);
-      return data.instance?.state || "disconnected";
+      const payload = res.data as ConnectionStateResponse;
+      // Algumas versões retornam em instance.state, outras em state
+      const state =
+        (payload.instance && (payload.instance as any).state) ||
+        (payload as any).state ||
+        "disconnected";
+      return String(state);
     } catch (error) {
       console.error("[QR] Error getting connection status:", error);
       return "disconnected";
@@ -77,70 +86,35 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
   };
 
   const generateQRCode = async () => {
-    console.log(`[QR] Botão clicado! Gerando QR code...`);
     setIsLoading(true);
-    
     try {
-      const url = `${instance.url}/instance/connect/${instance.instanceName}`;
-      console.log(`[QR] Request URL: ${url}`);
-      console.log(`[QR] Headers:`, {
-        "apikey": instance.apiKey,
-        "Content-Type": "application/json",
-      });
-
-      const response = await fetch(url, {
-        headers: {
-          "apikey": instance.apiKey,
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log(`[QR] QR Code response status:`, response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[QR] Failed to generate QR code: ${response.status} - ${errorText}`);
-        throw new Error(`Failed to generate QR code: ${response.status} - ${errorText}`);
+      const res = await callProxy("connect");
+      if (!res.success) {
+        throw new Error(`Status ${res.status}`);
       }
+      const data = res.data as QRCodeResponse;
 
-      const data: QRCodeResponse = await response.json();
-      console.log(`[QR] QR Code response data:`, data);
-      
-      // Verificar qual campo contém o QR Code
-      if (data.base64) {
-        console.log(`[QR] Using base64 field, length: ${data.base64.length}`);
-        console.log(`[QR] Base64 preview: ${data.base64.substring(0, 50)}...`);
-        
-        // O QR code já vem em formato data URL completo
-        setQrCode(data.base64);
-        setConnectionState("waiting_scan");
-        setIsConnecting(true);
-        
-        // Iniciar polling para verificar status
-        startPolling();
-        
-        toast.success("QR Code gerado com sucesso!");
-      } else if (data.code) {
-        console.log(`[QR] Using code field, length: ${data.code.length}`);
-        console.log(`[QR] Code preview: ${data.code.substring(0, 50)}...`);
-        
-        // Se tiver apenas o campo code, tentar usar ele (mas provavelmente não é uma imagem)
-        console.warn("[QR] Using 'code' field - this might not be a valid image!");
-        setQrCode(`data:image/png;base64,${data.code}`);
-        setConnectionState("waiting_scan");
-        setIsConnecting(true);
-        
-        // Iniciar polling para verificar status
-        startPolling();
-        
-        toast.success("QR Code gerado com sucesso!");
+      if ((data as any).base64) {
+        setQrCode((data as any).base64 as string);
+      } else if ((data as any).code) {
+        setQrCode(`data:image/png;base64,${(data as any).code}`);
       } else {
-        console.error(`[QR] No QR code fields found. Available fields:`, Object.keys(data));
-        throw new Error("No QR code received - missing 'base64' or 'code' field");
+        // Procurar possíveis campos aninhados
+        const maybeBase64 = (res.data && (res.data as any).qr) || (res.data && (res.data as any).image);
+        if (maybeBase64) {
+          setQrCode(String(maybeBase64));
+        } else {
+          throw new Error("QR code não encontrado na resposta.");
+        }
       }
-    } catch (error) {
+
+      setConnectionState("waiting_scan");
+      setIsConnecting(true);
+      startPolling();
+      toast.success("QR Code gerado com sucesso!");
+    } catch (error: any) {
       console.error("[QR] Error generating QR code:", error);
-      toast.error(`Erro ao gerar QR Code: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      toast.error(`Erro ao gerar QR Code: ${error.message || "Erro desconhecido"}`);
       setConnectionState("error");
     } finally {
       setIsLoading(false);
@@ -148,25 +122,13 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
   };
 
   const startPolling = () => {
-    console.log(`[QR] Starting polling for connection status...`);
-    
-    // Limpar polling anterior se existir
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-    }
-
-    // Verificar status a cada 3 segundos
+    if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
-      console.log(`[QR] Polling connection status...`);
       const status = await getConnectionStatus();
-      console.log(`[QR] Current status: ${status}`);
       setConnectionState(status);
-      
       if (status === "open") {
-        console.log(`[QR] Connection established!`);
         setIsConnecting(false);
         toast.success("Conexão estabelecida com sucesso!");
-        // Parar polling após conexão bem-sucedida
         if (pollingRef.current) {
           clearInterval(pollingRef.current);
           pollingRef.current = null;
@@ -176,49 +138,28 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
   };
 
   const handleDisconnect = async () => {
-    console.log(`[QR] Attempting to disconnect ${instance.instanceName}...`);
-    
-    try {
-      // Note: A API Evolution pode não ter um endpoint DELETE para desconectar
-      // Neste caso, vamos apenas limpar o estado local
-      setConnectionState("disconnected");
-      setQrCode("");
-      setIsConnecting(false);
-      toast.success("Estado de conexão resetado!");
-      
-      // Parar polling
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    } catch (error) {
-      console.error("[QR] Error disconnecting:", error);
-      toast.error("ErroErro ao desconectar");
+    setConnectionState("disconnected");
+    setQrCode("");
+    setIsConnecting(false);
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
     }
+    toast.success("Estado de conexão resetado!");
   };
 
   React.useEffect(() => {
-    // Limpar polling quando o componente for desmontado
     return () => {
-      console.log(`[QR] Cleaning up polling...`);
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
+      if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, []);
 
   React.useEffect(() => {
     if (isOpen && instance) {
-      console.log(`[QR] Dialog opened, checking initial status...`);
-      // Obter status inicial quando abrir
-      getConnectionStatus().then(status => {
-        console.log(`[QR] Initial status: ${status}`);
-        setConnectionState(status);
-      });
+      getConnectionStatus().then(setConnectionState);
     }
   }, [isOpen, instance]);
 
-  // Mapear status da API para nossos estados internos
   const getDisplayStatus = (apiStatus: string) => {
     switch (apiStatus) {
       case "open":
@@ -261,13 +202,11 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
     }
   };
 
-  // Verificar se deve mostrar o botão de gerar QR Code
   const shouldShowQRButton = () => {
     const displayStatus = getDisplayStatus(connectionState);
     return (displayStatus === "disconnected" || displayStatus === "connecting") && !qrCode;
   };
 
-  // Verificar se deve mostrar o QR Code
   const shouldShowQRCode = () => {
     const displayStatus = getDisplayStatus(connectionState);
     return qrCode && displayStatus !== "open";
@@ -290,21 +229,17 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
               {getStatusBadge()}
             </CardTitle>
             <CardDescription>
-              {getDisplayStatus(connectionState) === "open" 
-                ? "Sua instância está conectada ao WhatsApp" 
+              {getDisplayStatus(connectionState) === "open"
+                ? "Sua instância está conectada ao WhatsApp"
                 : "Siga as instruções abaixo para conectar"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col items-center space-y-4">
               {getStatusIcon()}
-              
+
               {shouldShowQRButton() && (
-                <Button 
-                  onClick={generateQRCode} 
-                  disabled={isLoading}
-                  className="w-full"
-                >
+                <Button onClick={generateQRCode} disabled={isLoading} className="w-full">
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -322,21 +257,13 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
               {shouldShowQRCode() && (
                 <>
                   <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300">
-                    <img 
-                      src={qrCode} 
-                      alt="QR Code WhatsApp" 
-                      className="w-48 h-48 object-contain"
-                    />
+                    <img src={qrCode} alt="QR Code WhatsApp" className="w-48 h-48 object-contain" />
                   </div>
                   <p className="text-sm text-center text-muted-foreground">
-                    Abra o WhatsApp no seu celular, toque em <strong>Menu ⋯</strong> ou <strong>Configurações ⚙️</strong>, 
-                    depois em <strong>Aparelhos Conectados</strong> e escaneie este código.
+                    Abra o WhatsApp no seu celular, toque em <strong>Menu ⋯</strong> ou{" "}
+                    <strong>Configurações ⚙️</strong>, depois em <strong>Aparelhos Conectados</strong> e escaneie este código.
                   </p>
-                  <Button 
-                    variant="outline" 
-                    onClick={generateQRCode}
-                    disabled={isLoading}
-                  >
+                  <Button variant="outline" onClick={generateQRCode} disabled={isLoading}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Atualizar QR Code
                   </Button>
@@ -344,11 +271,7 @@ export const InstanceQRConnection: React.FC<InstanceQRConnectionProps> = ({
               )}
 
               {getDisplayStatus(connectionState) === "open" && (
-                <Button 
-                  variant="destructive" 
-                  onClick={handleDisconnect}
-                  className="w-full"
-                >
+                <Button variant="destructive" onClick={handleDisconnect} className="w-full">
                   <WifiOff className="mr-2 h-4 w-4" />
                   Desconectar WhatsApp
                 </Button>
