@@ -78,8 +78,9 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
       if (selectedWebhookSource) {
         const key = (selectedWebhookSource.api_key ?? "").trim();
         const qp = new URLSearchParams({
-          source: user.id,
-          list_id: selectedList,
+          source: user.id,           // userId
+          source_id: selectedSource, // id da fonte de webhook
+          list_id: selectedList,     // id da lista de contatos
         });
         if (key.length > 0) {
           qp.set("api_key", key);
@@ -175,7 +176,7 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
               </SelectContent>
             </Select>
             <p className="text-sm text-muted-foreground">
-              Selecione uma fonte de webhook; se a chave de API estiver vazia, a URL não exigirá autenticação por parâmetro.
+              Se a fonte tiver chave de API, a URL incluirá api_key; se estiver vazia, a URL não exigirá esse parâmetro.
             </p>
           </div>
 
@@ -276,7 +277,12 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
-            {fieldExamples.map((field, index) => (
+            {[
+              { icon: Phone, label: "Telefone", examples: ["phone", "mobile", "telefone", "celular", "whatsapp"] },
+              { icon: User, label: "Nome", examples: ["name", "nome", "fullname", "firstName", "lastName"] },
+              { icon: Mail, label: "Email", examples: ["email", "mail", "emailaddress", "email_address"] },
+              { icon: Building, label: "Empresa", examples: ["company", "empresa", "organization", "account"] }
+            ].map((field, index) => (
               <div key={index} className="space-y-2">
                 <div className="flex items-center gap-2">
                   <field.icon className="h-4 w-4 text-muted-foreground" />
@@ -318,6 +324,7 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
           <div className="space-y-2">
             <h4 className="font-medium">3. Copie a URL</h4>
             <p className="text-sm text-muted-foreground">
+              A URL inclui source (seu userId), source_id (id da fonte) e list_id (id da lista).
               Se a fonte tiver chave, a URL incluirá api_key; caso contrário, será omitida.
             </p>
           </div>

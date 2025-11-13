@@ -36,7 +36,8 @@ serve(async (req) => {
   );
 
   let userId: string | null = null;
-  let listId: string | null = null;
+  let listId: string | null = null;      // agora: ID da lista de contatos
+  let sourceId: string | null = null;    // novo: ID da fonte de webhook
   let apiKey: string | null = null;
 
   const addLog = async (logUserId: string, event_type: string, message: string, metadata?: Record<string, any>) => {
@@ -55,32 +56,34 @@ serve(async (req) => {
     const url = new URL(req.url);
     userId = url.searchParams.get('source');
     listId = url.searchParams.get('list_id');
+    sourceId = url.searchParams.get('source_id');
     apiKey = url.searchParams.get('api_key');
 
-    // Apenas 'source' e 'list_id' são obrigatórios agora
-    if (!userId || !listId) {
-      const missingParams = [];
-      if (!userId) missingParams.push('source (userId)');
-      if (!listId) missingParams.push('list_id');
-      const errorMessage = `Parâmetros obrigatórios faltando: ${missingParams.join(', ')}`;
-      await addLog(userId || 'unknown', 'webhook_error', errorMessage, { url_params: { userId, listId } });
+    // Agora exigimos source (userId), source_id (fonte) e list_id (lista de contatos)
+    const missing: string[] = [];
+    if (!userId) missing.push('source (userId)');
+    if (!sourceId) missing.push('source_id (webhook source id)');
+    if (!listId) missing.push('list_id (contact list id)');
+    if (missing.length > 0) {
+      const errorMessage = `Parâmetros obrigatórios faltando: ${missing.join(', ')}`;
+      await addLog(userId || 'unknown', 'webhook_error', errorMessage, { url_params: { userId, sourceId, listId } });
       return new Response(JSON.stringify({ error: errorMessage }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Buscar fonte
+    // Buscar a fonte pela combinação user_id + source_id
     const { data: webhookSource, error: sourceError } = await supabaseClient
       .from('webhook_sources')
       .select('api_key, field_mapping, filters')
       .eq('user_id', userId)
-      .eq('id', listId)
+      .eq('id', sourceId)
       .single();
 
     if (sourceError || !webhookSource) {
-      const errorMessage = `Fonte de webhook não encontrada ou erro de acesso para userId: ${userId}, listId: ${listId}.`;
-      await addLog(userId, 'webhook_auth_error', errorMessage, { sourceError: sourceError?.message, listId });
+      const errorMessage = `Fonte de webhook não encontrada ou sem acesso.`;
+      await addLog(userId!, 'webhook_auth_error', errorMessage, { userId, sourceId, listId, sourceError: sourceError?.message });
       return new Response(JSON.stringify({ error: errorMessage }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -91,8 +94,8 @@ serve(async (req) => {
     const storedKey = (webhookSource.api_key ?? "").trim();
     if (storedKey.length > 0) {
       if (!apiKey || apiKey.trim() !== storedKey) {
-        const errorMessage = `API Key inválida para userId: ${userId}, listId: ${listId}.`;
-        await addLog(userId, 'webhook_auth_error', errorMessage, { providedApiKey: apiKey ? apiKey.substring(0, 5) + '...' : '(none)', expectedSet: true });
+        const errorMessage = `API Key inválida para a fonte de webhook.`;
+        await addLog(userId!, 'webhook_auth_error', errorMessage, { providedApiKey: apiKey ? apiKey.substring(0, 5) + '...' : '(none)', expectedSet: true });
         return new Response(JSON.stringify({ error: errorMessage }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -102,7 +105,7 @@ serve(async (req) => {
 
     // 3. Processar o corpo da requisição
     const requestBody = await req.json();
-    await addLog(userId, 'webhook_received', `Webhook recebido para lista ${listId}.`, { body: requestBody });
+    await addLog(userId!, 'webhook_received', `Webhook recebido para a lista ${listId}.`, { body: requestBody, sourceId });
 
     // Aplicar filtros (se existirem)
     if (webhookSource.filters) {
@@ -118,7 +121,7 @@ serve(async (req) => {
       }
       if (!passedFilters) {
         const message = `Webhook ignorado: não passou nos filtros definidos.`;
-        await addLog(userId, 'webhook_filtered', message, { filters: webhookSource.filters, receivedBody: requestBody });
+        await addLog(userId!, 'webhook_filtered', message, { filters: webhookSource.filters, receivedBody: requestBody });
         return new Response(JSON.stringify({ message: message }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -149,7 +152,7 @@ serve(async (req) => {
 
     if (!phoneNumber) {
       const errorMessage = `Número de telefone inválido ou não encontrado no payload.`;
-      await addLog(userId, 'webhook_error', errorMessage, { receivedBody: requestBody, fieldMapping });
+      await addLog(userId!, 'webhook_error', errorMessage, { receivedBody: requestBody, fieldMapping });
       return new Response(JSON.stringify({ error: errorMessage }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -182,6 +185,7 @@ serve(async (req) => {
       }
     }
 
+    // Verificar se o contato já existe na lista informada (listId é a lista de contatos)
     const { data: existingContacts, error: fetchContactError } = await supabaseClient
       .from('contacts')
       .select('id')
@@ -190,7 +194,7 @@ serve(async (req) => {
 
     if (fetchContactError) {
       const errorMessage = `Erro ao buscar contato existente: ${fetchContactError.message}`;
-      await addLog(userId, 'webhook_error', errorMessage, { phoneNumber, listId, fetchContactError: fetchContactError.message });
+      await addLog(userId!, 'webhook_error', errorMessage, { phoneNumber, listId, fetchContactError: fetchContactError.message });
       return new Response(JSON.stringify({ error: errorMessage }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -215,14 +219,14 @@ serve(async (req) => {
 
       if (updateError) {
         const errorMessage = `Erro ao atualizar contato: ${updateError.message}`;
-        await addLog(userId, 'webhook_error', errorMessage, { contactId, updateError: updateError.message });
+        await addLog(userId!, 'webhook_error', errorMessage, { contactId, updateError: updateError.message });
         return new Response(JSON.stringify({ error: errorMessage }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
       responseMessage = `Contato ${phoneNumber} atualizado na lista ${listId}.`;
-      await addLog(userId, 'contact_updated', responseMessage, { contactId, phoneNumber, listId });
+      await addLog(userId!, 'contact_updated', responseMessage, { contactId, phoneNumber, listId });
     } else {
       const { error: insertError } = await supabaseClient
         .from('contacts')
@@ -230,14 +234,14 @@ serve(async (req) => {
 
       if (insertError) {
         const errorMessage = `Erro ao inserir novo contato: ${insertError.message}`;
-        await addLog(userId, 'webhook_error', errorMessage, { phoneNumber, listId, insertError: insertError.message });
+        await addLog(userId!, 'webhook_error', errorMessage, { phoneNumber, listId, insertError: insertError.message });
         return new Response(JSON.stringify({ error: errorMessage }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
       responseMessage = `Novo contato ${phoneNumber} adicionado à lista ${listId}.`;
-      await addLog(userId, 'contact_added', responseMessage, { phoneNumber, listId });
+      await addLog(userId!, 'contact_added', responseMessage, { phoneNumber, listId });
     }
 
     return new Response(JSON.stringify({ message: responseMessage }), {
@@ -248,7 +252,7 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('Erro no webhook universal:', error);
     const errorMessage = `Erro interno no webhook universal: ${error.message}`;
-    await addLog(userId || 'unknown', 'webhook_error', errorMessage, { error: error.message, stack: error.stack, url_params: { userId, listId } });
+    await addLog(userId || 'unknown', 'webhook_error', errorMessage, { error: error.message, stack: error.stack, url_params: { userId, sourceId, listId } });
 
     return new Response(JSON.stringify({
       error: errorMessage,
