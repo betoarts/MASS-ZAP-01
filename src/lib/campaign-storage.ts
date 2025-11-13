@@ -88,6 +88,25 @@ export const updateCampaign = async (userId: string, updatedCampaignData: Campai
   return data as Campaign;
 };
 
+// NOVO: atualizar somente o status
+export const updateCampaignStatus = async (id: string, status: CampaignStatus): Promise<Campaign | null> => {
+  const { data, error } = await supabase
+    .from("campaigns")
+    .update({
+      status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating campaign status:", error);
+    return null;
+  }
+  return data as Campaign;
+};
+
 export const deleteCampaign = async (id: string): Promise<boolean> => {
   const { error } = await supabase.from("campaigns").delete().eq("id", id);
   if (error) {

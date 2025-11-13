@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Edit, Trash2, Play, Pause, StopCircle, FileText } from "lucide-react";
-import { Campaign, updateCampaign } from "@/lib/campaign-storage";
+import { Campaign, updateCampaign, updateCampaignStatus } from "@/lib/campaign-storage";
 import { Instance } from "@/lib/storage";
 import { ContactList } from "@/lib/contact-storage";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -110,9 +110,7 @@ export const CampaignTable: React.FC<CampaignTableProps> = ({
     }
     const loadingToastId = toast.loading(`Pausando campanha "${campaign.name}"...`);
     try {
-      // Mapeia todos os dados existentes e apenas sobrescreve o status
-      const formData = mapCampaignToFormData(campaign);
-      const updatedCampaign = await updateCampaign(user.id, { ...formData, id: campaign.id, status: 'stopped' }); 
+      const updatedCampaign = await updateCampaignStatus(campaign.id, 'stopped');
       if (updatedCampaign) {
         toast.success(`Campanha "${campaign.name}" pausada com sucesso.`, { id: loadingToastId });
         onCampaignStatusChange();
@@ -132,9 +130,7 @@ export const CampaignTable: React.FC<CampaignTableProps> = ({
     }
     const loadingToastId = toast.loading(`Parando campanha "${campaign.name}"...`);
     try {
-      // Mapeia todos os dados existentes e apenas sobrescreve o status
-      const formData = mapCampaignToFormData(campaign);
-      const updatedCampaign = await updateCampaign(user.id, { ...formData, id: campaign.id, status: 'stopped' });
+      const updatedCampaign = await updateCampaignStatus(campaign.id, 'stopped');
       if (updatedCampaign) {
         toast.success(`Campanha "${campaign.name}" parada com sucesso.`, { id: loadingToastId });
         onCampaignStatusChange();
