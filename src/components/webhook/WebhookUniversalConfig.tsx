@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSession } from "@/components/auth/SessionContextProvider";
-import { getWebhookSources, WebhookSource } from "@/lib/webhook-storage"; // Importar WebhookSource e getWebhookSources
+import { getWebhookSources, WebhookSource } from "@/lib/webhook-storage";
 
 interface WebhookUniversalConfigProps {
   onTest?: (config: any) => void;
@@ -41,9 +41,9 @@ interface WebhookUniversalConfigProps {
 export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ onTest }) => {
   const { user } = useSession();
   const [contactLists, setContactLists] = React.useState<ContactList[]>([]);
-  const [webhookSources, setWebhookSources] = React.useState<WebhookSource[]>([]); // Novo estado para fontes de webhook
+  const [webhookSources, setWebhookSources] = React.useState<WebhookSource[]>([]);
   const [selectedList, setSelectedList] = React.useState<string>("");
-  const [selectedSource, setSelectedSource] = React.useState<string>(""); // Novo estado para fonte de webhook selecionada
+  const [selectedSource, setSelectedSource] = React.useState<string>("");
   const [webhookUrl, setWebhookUrl] = React.useState("");
   const [copied, setCopied] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
@@ -62,26 +62,37 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
           setSelectedList(lists[0].id);
         }
       });
-      getWebhookSources(user.id).then(sources => { // Buscar fontes de webhook
+      getWebhookSources(user.id).then(sources => {
         setWebhookSources(sources);
         if (sources.length > 0 && !selectedSource) {
-          setSelectedSource(sources[0].id); // Selecionar a primeira fonte por padrão
+          setSelectedSource(sources[0].id);
         }
       });
     }
-  }, [user, selectedList, selectedSource]); // Adicionar selectedSource como dependência
+  }, [user, selectedList, selectedSource]);
 
   React.useEffect(() => {
-    if (selectedList && user && selectedSource) { // Incluir selectedSource na dependência
+    if (selectedList && user && selectedSource) {
       const selectedWebhookSource = webhookSources.find(source => source.id === selectedSource);
-      const apiKey = selectedWebhookSource?.api_key || 'YOUR_API_KEY_HERE'; // Usar a API Key da fonte selecionada
       const baseUrl = "https://aexlptrufyeyrhkvndzi.supabase.co/functions/v1/webhook-universal-v2";
-      const url = `${baseUrl}?source=${user.id}&list_id=${selectedList}&api_key=${apiKey}`;
-      setWebhookUrl(url);
+      if (selectedWebhookSource) {
+        const key = (selectedWebhookSource.api_key ?? "").trim();
+        const qp = new URLSearchParams({
+          source: user.id,
+          list_id: selectedList,
+        });
+        if (key.length > 0) {
+          qp.set("api_key", key);
+        }
+        const url = `${baseUrl}?${qp.toString()}`;
+        setWebhookUrl(url);
+      } else {
+        setWebhookUrl("");
+      }
     } else {
       setWebhookUrl("");
     }
-  }, [selectedList, user, selectedSource, webhookSources]); // Adicionar webhookSources como dependência
+  }, [selectedList, user, selectedSource, webhookSources]);
 
   const copyToClipboard = async () => {
     try {
@@ -104,10 +115,7 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
 
     try {
       const testPayload = JSON.parse(testData);
-      const selectedWebhookSource = webhookSources.find(source => source.id === selectedSource);
-      const apiKey = selectedWebhookSource?.api_key || 'test-key'; // Usar a API Key da fonte selecionada para o teste
-
-      const response = await fetch(webhookUrl.replace('YOUR_API_KEY_HERE', apiKey), { // Substituir o placeholder
+      const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testPayload)
@@ -167,7 +175,7 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
               </SelectContent>
             </Select>
             <p className="text-sm text-muted-foreground">
-              Selecione uma fonte de webhook para usar sua API Key.
+              Selecione uma fonte de webhook; se a chave de API estiver vazia, a URL não exigirá autenticação por parâmetro.
             </p>
           </div>
 
@@ -298,7 +306,7 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
           <div className="space-y-2">
             <h4 className="font-medium">1. Crie uma Fonte de Webhook</h4>
             <p className="text-sm text-muted-foreground">
-              Clique em "Adicionar Fonte" e defina um nome e uma API Key.
+              Clique em "Adicionar Fonte" e defina um nome. A chave de API é opcional.
             </p>
           </div>
           <div className="space-y-2">
@@ -310,84 +318,8 @@ export const WebhookUniversalConfig: React.FC<WebhookUniversalConfigProps> = ({ 
           <div className="space-y-2">
             <h4 className="font-medium">3. Copie a URL</h4>
             <p className="text-sm text-muted-foreground">
-              Clique no botão de copiar ao lado da URL do webhook
+              Se a fonte tiver chave, a URL incluirá api_key; caso contrário, será omitida.
             </p>
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="font-medium">4. Cole no seu CRM</h4>
-            <p className="text-sm text-muted-foreground">
-              Adicione a URL nas configurações de webhook do seu CRM (HubSpot, Salesforce, Pipedrive, etc.)
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="font-medium">5. Envie qualquer JSON</h4>
-            <p className="text-sm text-muted-foreground">
-              O sistema detectará automaticamente telefone, nome, email e empresa
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="font-medium">6. Pronto!</h4>
-            <p className="text-sm text-muted-foreground">
-              Os contatos serão adicionados automaticamente à lista selecionada
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="bg-blue-50 dark:bg-blue-900/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info className="h-5 w-5 text-blue-600" />
-              </TooltipTrigger>
-              <TooltipContent>
-                Dica: Você pode usar qualquer estrutura JSON!
-              </TooltipContent>
-            </Tooltip>
-            Exemplos de Estruturas Aceitas
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">HubSpot:</h4>
-            <pre className="text-xs bg-white dark:bg-gray-800 p-3 rounded overflow-x-auto">
-{`{
-  "properties": {
-    "mobilephone": "+55 11 98765-4321",
-    "firstname": "João",
-    "lastname": "Silva",
-    "email": "joao@hubspot.com"
-  }
-}`}
-            </pre>
-          </div>
-
-          <div>
-            <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">Salesforce:</h4>
-            <pre className="text-xs bg-white dark:bg-gray-800 p-3 rounded overflow-x-auto">
-{`{
-  "MobilePhone": "5511987654321",
-  "Name": "João da Silva",
-  "Email": "joao@salesforce.com",
-  "Account": {"Name": "Tech Corp"}
-}`}
-            </pre>
-          </div>
-
-          <div>
-            <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">RD Station:</h4>
-            <pre className="text-xs bg-white dark:bg-gray-800 p-3 rounded overflow-x-auto">
-{`{
-  "phone_number": "+55 11 98765-4321",
-  "name": "João Silva",
-  "email": "joao@rdstation.com",
-  "company_name": "Tech Corp"
-}`}
-            </pre>
           </div>
         </CardContent>
       </Card>

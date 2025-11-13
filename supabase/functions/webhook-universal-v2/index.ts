@@ -13,7 +13,7 @@ function getNestedValue(obj: any, path: string): any {
   const parts = path.split('.');
   let current = obj;
   for (const part of parts) {
-    if (current === null || typeof current !== 'object' || !current.hasOwnProperty(part)) {
+    if (current === null || typeof current !== 'object' || !Object.prototype.hasOwnProperty.call(current, part)) {
       return undefined;
     }
     current = current[part];
@@ -35,20 +35,19 @@ serve(async (req) => {
     { auth: { persistSession: false } }
   );
 
-  let userId: string | null = null; // Renomeado de 'source' para 'userId' para clareza
+  let userId: string | null = null;
   let listId: string | null = null;
   let apiKey: string | null = null;
 
-  // Função para adicionar um log (usando o cliente com service role key)
   const addLog = async (logUserId: string, event_type: string, message: string, metadata?: Record<string, any>) => {
     await supabaseClient
-      .from('campaign_logs') // Reutilizando campaign_logs para logs de webhook
+      .from('campaign_logs')
       .insert({
         user_id: logUserId,
-        campaign_id: null, // Não associado a uma campanha específica
-        event_type: event_type,
-        message: message,
-        metadata: metadata,
+        campaign_id: null,
+        event_type,
+        message,
+        metadata,
       });
   };
 
@@ -58,26 +57,25 @@ serve(async (req) => {
     listId = url.searchParams.get('list_id');
     apiKey = url.searchParams.get('api_key');
 
-    // 1. Validações básicas dos parâmetros da URL
-    if (!userId || !listId || !apiKey) {
+    // Apenas 'source' e 'list_id' são obrigatórios agora
+    if (!userId || !listId) {
       const missingParams = [];
       if (!userId) missingParams.push('source (userId)');
       if (!listId) missingParams.push('list_id');
-      if (!apiKey) missingParams.push('api_key');
       const errorMessage = `Parâmetros obrigatórios faltando: ${missingParams.join(', ')}`;
-      await addLog(userId || 'unknown', 'webhook_error', errorMessage, { url_params: { userId, listId, apiKey } });
+      await addLog(userId || 'unknown', 'webhook_error', errorMessage, { url_params: { userId, listId } });
       return new Response(JSON.stringify({ error: errorMessage }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // 2. Validar a API Key
+    // Buscar fonte
     const { data: webhookSource, error: sourceError } = await supabaseClient
       .from('webhook_sources')
       .select('api_key, field_mapping, filters')
       .eq('user_id', userId)
-      .eq('id', listId) // Assumindo que listId pode ser usado para identificar a fonte se for um webhook por lista
+      .eq('id', listId)
       .single();
 
     if (sourceError || !webhookSource) {
@@ -89,13 +87,17 @@ serve(async (req) => {
       });
     }
 
-    if (webhookSource.api_key !== apiKey) {
-      const errorMessage = `API Key inválida para userId: ${userId}, listId: ${listId}.`;
-      await addLog(userId, 'webhook_auth_error', errorMessage, { providedApiKey: apiKey, expectedApiKeyPrefix: webhookSource.api_key.substring(0, 5) + '...' });
-      return new Response(JSON.stringify({ error: errorMessage }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+    // Validar api_key somente se a fonte tiver chave não vazia
+    const storedKey = (webhookSource.api_key ?? "").trim();
+    if (storedKey.length > 0) {
+      if (!apiKey || apiKey.trim() !== storedKey) {
+        const errorMessage = `API Key inválida para userId: ${userId}, listId: ${listId}.`;
+        await addLog(userId, 'webhook_auth_error', errorMessage, { providedApiKey: apiKey ? apiKey.substring(0, 5) + '...' : '(none)', expectedSet: true });
+        return new Response(JSON.stringify({ error: errorMessage }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // 3. Processar o corpo da requisição
@@ -131,18 +133,16 @@ serve(async (req) => {
     let firstName: string | undefined;
     const customData: Record<string, any> = {};
 
-    // Tentar encontrar o número de telefone primeiro
     const phoneKeys = ['phone', 'mobile', 'telefone', 'celular', 'whatsapp', 'phone_number', 'mobilephone'];
     for (const key of phoneKeys) {
-      const mappedKey = fieldMapping[key] || key; // Usar mapeamento se existir, senão a própria chave
+      const mappedKey = fieldMapping[key] || key;
       const value = getNestedValue(requestBody, mappedKey);
       if (value) {
-        phoneNumber = String(value).replace(/\D/g, ''); // Limpar para apenas dígitos
-        // Validação básica de número de telefone (10 a 15 dígitos, não começando com 0)
+        phoneNumber = String(value).replace(/\D/g, '');
         if (/^[1-9]\d{9,14}$/.test(phoneNumber)) {
           break;
         } else {
-          phoneNumber = undefined; // Reset se inválido
+          phoneNumber = undefined;
         }
       }
     }
@@ -156,7 +156,6 @@ serve(async (req) => {
       });
     }
 
-    // Tentar encontrar nome completo e primeiro nome
     const nameKeys = ['name', 'nome', 'fullname', 'full_name'];
     for (const key of nameKeys) {
       const mappedKey = fieldMapping[key] || key;
@@ -171,21 +170,18 @@ serve(async (req) => {
     for (const key of firstNameKeys) {
       const mappedKey = fieldMapping[key] || key;
       const value = getNestedValue(requestBody, mappedKey);
-      if (value && !firstName) { // Só atribui se firstName ainda não foi encontrado
+      if (value && !firstName) {
         firstName = String(value);
         break;
       }
     }
 
-    // Coletar dados personalizados
     for (const key in requestBody) {
-      // Evitar sobrescrever campos padrão já mapeados
       if (!phoneKeys.includes(key.toLowerCase()) && !nameKeys.includes(key.toLowerCase()) && !firstNameKeys.includes(key.toLowerCase())) {
         customData[key] = requestBody[key];
       }
     }
 
-    // 5. Inserir ou atualizar contato
     const { data: existingContacts, error: fetchContactError } = await supabaseClient
       .from('contacts')
       .select('id')
@@ -211,7 +207,6 @@ serve(async (req) => {
 
     let responseMessage = '';
     if (existingContacts && existingContacts.length > 0) {
-      // Atualizar contato existente
       const contactId = existingContacts[0].id;
       const { error: updateError } = await supabaseClient
         .from('contacts')
@@ -229,7 +224,6 @@ serve(async (req) => {
       responseMessage = `Contato ${phoneNumber} atualizado na lista ${listId}.`;
       await addLog(userId, 'contact_updated', responseMessage, { contactId, phoneNumber, listId });
     } else {
-      // Inserir novo contato
       const { error: insertError } = await supabaseClient
         .from('contacts')
         .insert(contactData);
@@ -254,7 +248,7 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('Erro no webhook universal:', error);
     const errorMessage = `Erro interno no webhook universal: ${error.message}`;
-    await addLog(userId || 'unknown', 'webhook_error', errorMessage, { error: error.message, stack: error.stack, url_params: { userId, listId, apiKey } });
+    await addLog(userId || 'unknown', 'webhook_error', errorMessage, { error: error.message, stack: error.stack, url_params: { userId, listId } });
 
     return new Response(JSON.stringify({
       error: errorMessage,

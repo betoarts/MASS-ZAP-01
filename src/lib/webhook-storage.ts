@@ -7,7 +7,7 @@ export interface WebhookSource {
   source_type: 'hubspot' | 'salesforce' | 'pipedrive' | 'universal';
   field_mapping: Record<string, string>;
   filters?: Record<string, any>;
-  api_key: string; // Adicionado
+  api_key?: string; // agora opcional (pode ser vazio)
   created_at: string;
   updated_at: string;
 }
@@ -27,16 +27,18 @@ export const getWebhookSources = async (userId: string): Promise<WebhookSource[]
 };
 
 export const createWebhookSource = async (userId: string, source: Omit<WebhookSource, 'id' | 'user_id' | 'created_at' | 'updated_at'>): Promise<WebhookSource | null> => {
+  const insertData: any = {
+    user_id: userId,
+    name: source.name,
+    source_type: source.source_type,
+    field_mapping: source.field_mapping,
+    filters: source.filters,
+    api_key: (source.api_key ?? "").trim(), // salva vazio quando não fornecida
+  };
+
   const { data, error } = await supabase
     .from("webhook_sources")
-    .insert({
-      user_id: userId,
-      name: source.name,
-      source_type: source.source_type,
-      field_mapping: source.field_mapping,
-      filters: source.filters,
-      api_key: source.api_key, // Adicionado
-    })
+    .insert(insertData)
     .select()
     .single();
 
@@ -48,16 +50,22 @@ export const createWebhookSource = async (userId: string, source: Omit<WebhookSo
 };
 
 export const updateWebhookSource = async (userId: string, source: Omit<WebhookSource, 'user_id' | 'created_at' | 'updated_at'>): Promise<WebhookSource | null> => {
+  const updateData: any = {
+    name: source.name,
+    source_type: source.source_type,
+    field_mapping: source.field_mapping,
+    filters: source.filters,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Se api_key vier definida (inclui string vazia), atualiza; se for undefined, mantém a atual
+  if (typeof source.api_key !== "undefined") {
+    updateData.api_key = (source.api_key ?? "").trim();
+  }
+
   const { data, error } = await supabase
     .from("webhook_sources")
-    .update({
-      name: source.name,
-      source_type: source.source_type,
-      field_mapping: source.field_mapping,
-      filters: source.filters,
-      api_key: source.api_key, // Adicionado
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq("id", source.id)
     .eq("user_id", userId)
     .select()

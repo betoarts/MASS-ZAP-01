@@ -30,7 +30,7 @@ const formSchema = z.object({
   source_type: z.string().min(1, "Selecione um tipo de fonte"),
   field_mapping: z.string().min(10, "Mapeamento de campos é obrigatório"),
   filters: z.string().optional(),
-  api_key: z.string().min(1, "A chave da API é obrigatória. Gere uma aleatória se não tiver."), // Adicionado
+  api_key: z.string().optional().or(z.literal("")), // opcional
 });
 
 interface WebhookSourceFormProps {
@@ -46,7 +46,7 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
       source_type: initialData?.source_type || "",
       field_mapping: initialData?.field_mapping ? JSON.stringify(initialData.field_mapping, null, 2) : "",
       filters: initialData?.filters ? JSON.stringify(initialData.filters, null, 2) : "",
-      api_key: initialData?.api_key || "", // Adicionado
+      api_key: initialData?.api_key ?? "", // pode ser vazio
     },
   });
 
@@ -60,7 +60,7 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
         source_type: values.source_type as WebhookSource['source_type'],
         field_mapping: fieldMapping,
         filters: filters,
-        api_key: values.api_key, // Adicionado
+        api_key: (values.api_key ?? "").trim(), // enviar vazio quando não houver
       });
     } catch (error) {
       form.setError("field_mapping", { message: "JSON inválido no mapeamento de campos" });
@@ -117,12 +117,12 @@ export const WebhookSourceForm: React.FC<WebhookSourceFormProps> = ({ initialDat
           name="api_key"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Chave da API</FormLabel>
+              <FormLabel>Chave da API (Opcional)</FormLabel>
               <FormControl>
-                <Input placeholder="Sua chave de API secreta" {...field} />
+                <Input placeholder="Deixe em branco para não exigir autenticação" {...field} />
               </FormControl>
               <FormDescription>
-                Use esta chave na URL do webhook para autenticação.
+                Se preenchido, a URL do webhook exigirá esse parâmetro. Se vazio, a autenticação por chave será desativada para esta fonte.
               </FormDescription>
               <FormMessage />
             </FormItem>
