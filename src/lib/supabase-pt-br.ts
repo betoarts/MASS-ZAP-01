@@ -1,16 +1,22 @@
 export const ptBR = {
   variables: {
     sign_in: {
-      email_label: 'Seu e-mail',
-      password_label: 'Sua senha',
+      email_label: 'E-mail',
+      email_input_placeholder: 'Seu e-mail',
+      password_label: 'Senha',
+      password_input_placeholder: 'Sua senha',
       button_label: 'Entrar',
       loading_button_label: 'Entrando...',
       social_provider_text: 'Entrar com {{provider}}',
       link_text: 'Não tem conta? Cadastre-se',
+      // Alguns temas usam esta chave para o link de esqueci a senha
+      forgot_password_link_text: 'Esqueceu sua senha?',
     },
     sign_up: {
-      email_label: 'Seu e-mail',
+      email_label: 'E-mail',
+      email_input_placeholder: 'Seu e-mail',
       password_label: 'Crie uma senha',
+      password_input_placeholder: 'Sua senha',
       button_label: 'Criar conta',
       loading_button_label: 'Criando conta...',
       social_provider_text: 'Cadastrar com {{provider}}',
