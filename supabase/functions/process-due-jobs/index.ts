@@ -143,6 +143,8 @@ async function processSendMessage(job: any, context: any, supabase: any) {
     throw new Error('Instância não encontrada');
   }
 
+  const messagesToSend = [];
+
   // Se tem lista de contatos, enviar para todos
   if (contactListId) {
     const { data: contacts } = await supabase
@@ -151,33 +153,63 @@ async function processSendMessage(job: any, context: any, supabase: any) {
       .eq('contact_list_id', contactListId);
 
     if (!contacts || contacts.length === 0) {
-      throw new Error('Lista de contatos vazia');
+      // Não é um erro fatal se a lista estiver vazia, apenas não envia nada.
+      return;
     }
 
     for (const contact of contacts) {
-      const contactContext = {
-        ...context,
-        name: contact.full_name || contact.first_name || '',
+      const baseContext = { ...context };
+      
+      // Standardize contact data for replacement using standard placeholders
+      const fullName = contact.full_name || contact.first_name || '';
+      const firstName = contact.first_name || fullName.split(' ')[0] || 'Amigo';
+
+      const replacementContext = {
         phone: contact.phone_number,
-        firstName: contact.first_name || '',
+        nome_completo: fullName,
+        primeiro_nome: firstName,
         ...contact.custom_data,
       };
-
-      await sendMessage(instance, contactContext, message);
       
-      // Delay entre mensagens
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const finalContext = { ...baseContext, ...replacementContext };
+      messagesToSend.push({ instance, context: finalContext, message });
     }
   } else {
-    // Enviar apenas para o contexto atual
-    await sendMessage(instance, context, message);
+    // Enviar apenas para o contexto atual (assumindo que 'phone' está em context)
+    const baseContext = { ...context };
+    
+    // Standardize context data for replacement
+    const name = baseContext.name || baseContext.fullName || baseContext.nome_completo || '';
+    const firstName = baseContext.firstName || baseContext.primeiro_nome || name.split(' ')[0] || 'Amigo';
+
+    const replacementContext = {
+      phone: baseContext.phone, // Assumes phone is present in context
+      nome_completo: name,
+      primeiro_nome: firstName,
+    };
+    
+    const finalContext = { ...baseContext, ...replacementContext };
+    messagesToSend.push({ instance, context: finalContext, message });
+  }
+
+  for (const { instance, context: msgContext, message } of messagesToSend) {
+    await sendMessage(instance, msgContext, message);
+    // Delay entre mensagens (apenas se houver mais de uma mensagem)
+    if (messagesToSend.length > 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
   }
 }
 
 async function sendMessage(instance: any, context: any, message: string) {
   let finalMessage = message;
+  
+  // Substituir variáveis no message
   for (const key in context) {
-    finalMessage = finalMessage.replace(new RegExp(`{{${key}}}`, 'g'), context[key]);
+    // Garante que apenas strings sejam usadas para substituição e evita substituição de objetos complexos
+    if (typeof context[key] === 'string' || typeof context[key] === 'number') {
+        finalMessage = finalMessage.replace(new RegExp(`{{${key}}}`, 'g'), String(context[key]));
+    }
   }
 
   const phoneNumber = context.phone || '';
@@ -239,7 +271,8 @@ async function processCondition(job: any, execution: any, context: any, supabase
   
   let result = false;
   try {
-    result = await jexl.eval(expression, { context });
+    // JEXL espera que o contexto seja passado diretamente
+    result = await jexl.eval(expression, context);
   } catch (error) {
     console.error('Erro ao avaliar expressão:', error);
     result = false;
@@ -272,7 +305,10 @@ async function processWebhook(job: any, context: any, supabase: any) {
   
   // Substituir variáveis no body
   for (const key in context) {
-    body = body.replace(new RegExp(`{{${key}}}`, 'g'), context[key]);
+    // Garante que apenas strings sejam usadas para substituição e evita substituição de objetos complexos
+    if (typeof context[key] === 'string' || typeof context[key] === 'number') {
+        body = body.replace(new RegExp(`{{${key}}}`, 'g'), String(context[key]));
+    }
   }
   
   const response = await fetch(url, {
