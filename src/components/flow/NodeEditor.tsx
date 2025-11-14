@@ -47,6 +47,18 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
     }
   };
 
+  // Função auxiliar para mapear valor do Select para o estado do nó
+  const handleSelectChange = (field: string, value: string) => {
+    // Se o valor for 'none' (nosso placeholder para vazio), definimos como undefined
+    const finalValue = value === 'none' ? undefined : value;
+    handleChange(field, finalValue);
+  };
+
+  // Função auxiliar para obter o valor do Select, usando 'none' se for undefined/null
+  const getSelectValue = (value: string | undefined | null) => {
+    return value || 'none';
+  };
+
   return (
     <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
       <Card>
@@ -67,13 +79,14 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
               <div>
                 <Label>Instância WhatsApp</Label>
                 <Select
-                  value={selectedNode.data.instanceId || ''}
-                  onValueChange={(value) => handleChange('instanceId', value)}
+                  value={getSelectValue(selectedNode.data.instanceId)}
+                  onValueChange={(value) => handleSelectChange('instanceId', value)}
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Selecione uma instância" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">Nenhuma</SelectItem>
                     {instances.length === 0 ? (
                       <SelectItem value="no-instance" disabled>
                         Nenhuma instância disponível
@@ -109,14 +122,14 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
               <div>
                 <Label>Usar Lista de Contatos (Opcional)</Label>
                 <Select
-                  value={selectedNode.data.contactListId || ''}
-                  onValueChange={(value) => handleChange('contactListId', value)}
+                  value={getSelectValue(selectedNode.data.contactListId)}
+                  onValueChange={(value) => handleSelectChange('contactListId', value)}
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Nenhuma (usar contexto)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma (usar contexto)</SelectItem>
+                    <SelectItem value="none">Nenhuma (usar contexto)</SelectItem>
                     {contactLists.map((list) => (
                       <SelectItem key={list.id} value={list.id}>
                         {list.name} ({list.contacts.length} contatos)
