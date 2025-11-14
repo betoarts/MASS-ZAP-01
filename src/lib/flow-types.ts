@@ -11,6 +11,8 @@ export interface NodeData {
   label?: string;
   // send_message
   message?: string;
+  instanceId?: string;
+  contactListId?: string;
   // wait
   delay?: number;
   delayUnit?: 'seconds' | 'minutes' | 'hours';

@@ -5,12 +5,13 @@ import { FlowCanvas } from '@/components/flow/FlowCanvas';
 import { NodeEditor } from '@/components/flow/NodeEditor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Save, Play, ArrowLeft } from 'lucide-react';
+import { Save, Play, ArrowLeft, Info } from 'lucide-react';
 import { FlowNode, FlowEdge } from '@/lib/flow-types';
 import { getFlowById, updateFlow } from '@/lib/flow-storage';
 import { useSession } from '@/components/auth/SessionContextProvider';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const FlowBuilder: React.FC = () => {
   const { flowId } = useParams<{ flowId: string }>();
@@ -58,15 +59,30 @@ const FlowBuilder: React.FC = () => {
     );
   }, []);
 
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+    setSelectedNode(null);
+    toast.success('Bloco excluído com sucesso!');
+  }, []);
+
   const handleExecuteTest = async () => {
     if (!flowId || !user) return;
 
+    // Validar se o flow tem um node start
+    const hasStart = nodes.some(n => n.type === 'start');
+    if (!hasStart) {
+      toast.error('O fluxo precisa ter um bloco de Início!');
+      return;
+    }
+
     const testContext = {
-      name: 'João',
+      name: 'João Silva',
       phone: '5511987654321',
+      email: 'joao@exemplo.com',
     };
 
-    toast.loading('Iniciando execução de teste...');
+    const loadingToast = toast.loading('Iniciando execução de teste...');
 
     try {
       const { data, error } = await supabase.functions.invoke('execute-flow', {
@@ -78,12 +94,21 @@ const FlowBuilder: React.FC = () => {
       });
 
       if (error) {
-        toast.error('Erro ao executar fluxo: ' + error.message);
+        toast.error('Erro ao executar fluxo', { 
+          description: error.message,
+          id: loadingToast 
+        });
       } else {
-        toast.success('Fluxo iniciado! Execution ID: ' + data.executionId);
+        toast.success('Fluxo iniciado com sucesso!', { 
+          description: `Execution ID: ${data.executionId}`,
+          id: loadingToast 
+        });
       }
     } catch (err: any) {
-      toast.error('Erro: ' + err.message);
+      toast.error('Erro inesperado', { 
+        description: err.message,
+        id: loadingToast 
+      });
     }
   };
 
@@ -98,11 +123,11 @@ const FlowBuilder: React.FC = () => {
           <Input
             value={flowName}
             onChange={(e) => setFlowName(e.target.value)}
-            className="font-semibold text-lg border-none shadow-none focus-visible:ring-0"
+            className="font-semibold text-lg border-none shadow-none focus-visible:ring-0 max-w-md"
           />
         </div>
         <div className="flex gap-2">
-          <Button onClick={handleSave} disabled={isSaving}>
+          <Button onClick={handleSave} disabled={isSaving} variant="outline">
             <Save className="mr-2 h-4 w-4" />
             {isSaving ? 'Salvando...' : 'Salvar'}
           </Button>
@@ -111,6 +136,17 @@ const FlowBuilder: React.FC = () => {
             Executar Teste
           </Button>
         </div>
+      </div>
+
+      {/* Info Alert */}
+      <div className="px-4 py-2 bg-blue-50">
+        <Alert className="border-blue-200 bg-blue-50">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-sm text-blue-800">
+            <strong>Dica:</strong> Arraste blocos da barra lateral, conecte-os e configure clicando neles. 
+            Use <kbd className="px-1 py-0.5 bg-white border rounded text-xs">Delete</kbd> ou <kbd className="px-1 py-0.5 bg-white border rounded text-xs">Backspace</kbd> para excluir blocos selecionados.
+          </AlertDescription>
+        </Alert>
       </div>
 
       {/* Main Content */}
@@ -123,7 +159,11 @@ const FlowBuilder: React.FC = () => {
           onEdgesChange={setEdges}
           onNodeSelect={setSelectedNode}
         />
-        <NodeEditor selectedNode={selectedNode} onUpdateNode={handleUpdateNode} />
+        <NodeEditor 
+          selectedNode={selectedNode} 
+          onUpdateNode={handleUpdateNode}
+          onDeleteNode={handleDeleteNode}
+        />
       </div>
     </div>
   );

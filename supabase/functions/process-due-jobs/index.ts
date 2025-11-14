@@ -1,5 +1,8 @@
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+// @ts-ignore
 import jexl from 'https://esm.sh/jexl@2.3.0';
 
 const corsHeaders = {
@@ -13,13 +16,14 @@ serve(async (req) => {
   }
 
   const supabase = createClient(
+    // @ts-ignore
     Deno.env.get('SUPABASE_URL') ?? '',
+    // @ts-ignore
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     { auth: { persistSession: false } }
   );
 
   try {
-    // Buscar jobs pendentes que já passaram do horário agendado
     const { data: jobs, error: jobsError } = await supabase
       .from('jobs')
       .select('*')
@@ -36,13 +40,11 @@ serve(async (req) => {
 
     for (const job of jobs) {
       try {
-        // Marcar como processing
         await supabase
           .from('jobs')
           .update({ status: 'processing' })
           .eq('id', job.id);
 
-        // Buscar execution e flow
         const { data: execution } = await supabase
           .from('executions')
           .select('*, flows(*)')
@@ -53,7 +55,6 @@ serve(async (req) => {
 
         const context = execution.context || {};
 
-        // Processar de acordo com o tipo
         if (job.node_type === 'send_message') {
           await processSendMessage(job, context, supabase);
         } else if (job.node_type === 'wait') {
@@ -66,13 +67,11 @@ serve(async (req) => {
           await processEnd(job, execution, supabase);
         }
 
-        // Marcar job como completed
         await supabase
           .from('jobs')
           .update({ status: 'completed', processed_at: new Date().toISOString() })
           .eq('id', job.id);
 
-        // Avançar para próximos nodes (exceto wait e end)
         if (job.node_type !== 'wait' && job.node_type !== 'end') {
           await scheduleNextNodes(job, execution, supabase);
         }
@@ -80,10 +79,9 @@ serve(async (req) => {
       } catch (error: any) {
         console.error('Erro processando job:', error);
         
-        // Retry logic
         const newRetryCount = job.retry_count + 1;
         if (newRetryCount < job.max_retries) {
-          const backoffSeconds = Math.pow(2, newRetryCount) * 60; // exponential backoff
+          const backoffSeconds = Math.pow(2, newRetryCount) * 60;
           const nextSchedule = new Date(Date.now() + backoffSeconds * 1000).toISOString();
           
           await supabase
@@ -127,32 +125,66 @@ serve(async (req) => {
 
 async function processSendMessage(job: any, context: any, supabase: any) {
   const message = job.node_data.message || '';
-  
-  // Substituir placeholders
+  const instanceId = job.node_data.instanceId;
+  const contactListId = job.node_data.contactListId;
+
+  if (!instanceId) {
+    throw new Error('Instância não configurada no bloco de mensagem');
+  }
+
+  // Buscar instância específica
+  const { data: instance, error: instanceError } = await supabase
+    .from('instances')
+    .select('*')
+    .eq('id', instanceId)
+    .single();
+
+  if (instanceError || !instance) {
+    throw new Error('Instância não encontrada');
+  }
+
+  // Se tem lista de contatos, enviar para todos
+  if (contactListId) {
+    const { data: contacts } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('contact_list_id', contactListId);
+
+    if (!contacts || contacts.length === 0) {
+      throw new Error('Lista de contatos vazia');
+    }
+
+    for (const contact of contacts) {
+      const contactContext = {
+        ...context,
+        name: contact.full_name || contact.first_name || '',
+        phone: contact.phone_number,
+        firstName: contact.first_name || '',
+        ...contact.custom_data,
+      };
+
+      await sendMessage(instance, contactContext, message);
+      
+      // Delay entre mensagens
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  } else {
+    // Enviar apenas para o contexto atual
+    await sendMessage(instance, context, message);
+  }
+}
+
+async function sendMessage(instance: any, context: any, message: string) {
   let finalMessage = message;
   for (const key in context) {
     finalMessage = finalMessage.replace(new RegExp(`{{${key}}}`, 'g'), context[key]);
   }
 
-  // Buscar instância do usuário (assumindo que há uma tabela instances)
-  const { data: instances } = await supabase
-    .from('instances')
-    .select('*')
-    .eq('user_id', job.user_id)
-    .limit(1);
-
-  if (!instances || instances.length === 0) {
-    throw new Error('Nenhuma instância configurada');
-  }
-
-  const instance = instances[0];
   const phoneNumber = context.phone || '';
-
   if (!phoneNumber) {
     throw new Error('Número de telefone não encontrado no contexto');
   }
 
-  // Enviar via Evolution API
   const evolutionUrl = `${instance.url}/message/sendText/${instance.instance_name}`;
   const response = await fetch(evolutionUrl, {
     method: 'POST',
@@ -183,7 +215,6 @@ async function processWait(job: any, execution: any, supabase: any) {
 
   const nextSchedule = new Date(Date.now() + delayMs).toISOString();
 
-  // Agendar próximos nodes
   const flow = execution.flows;
   const nextEdges = flow.edges.filter((e: any) => e.source === job.node_id);
   
@@ -237,11 +268,17 @@ async function processCondition(job: any, execution: any, context: any, supabase
 async function processWebhook(job: any, context: any, supabase: any) {
   const url = job.node_data.url || '';
   const method = job.node_data.method || 'POST';
+  let body = job.node_data.body || '';
+  
+  // Substituir variáveis no body
+  for (const key in context) {
+    body = body.replace(new RegExp(`{{${key}}}`, 'g'), context[key]);
+  }
   
   const response = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
-    body: method === 'POST' ? JSON.stringify(context) : undefined,
+    body: method === 'POST' ? body : undefined,
   });
 
   if (!response.ok) {

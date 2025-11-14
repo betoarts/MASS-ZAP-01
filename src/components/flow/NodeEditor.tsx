@@ -4,14 +4,31 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-react';
 import { FlowNode } from '@/lib/flow-types';
+import { Instance, getInstances } from '@/lib/storage';
+import { ContactList, getContactLists } from '@/lib/contact-storage';
+import { useSession } from '@/components/auth/SessionContextProvider';
 
 interface NodeEditorProps {
   selectedNode: FlowNode | null;
   onUpdateNode: (nodeId: string, data: any) => void;
+  onDeleteNode: (nodeId: string) => void;
 }
 
-export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNode }) => {
+export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNode, onDeleteNode }) => {
+  const { user } = useSession();
+  const [instances, setInstances] = React.useState<Instance[]>([]);
+  const [contactLists, setContactLists] = React.useState<ContactList[]>([]);
+
+  React.useEffect(() => {
+    if (user) {
+      getInstances(user.id).then(setInstances);
+      getContactLists().then(setContactLists);
+    }
+  }, [user]);
+
   if (!selectedNode) {
     return (
       <div className="w-80 bg-white border-l border-gray-200 p-4">
@@ -24,15 +41,57 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
     onUpdateNode(selectedNode.id, { ...selectedNode.data, [field]: value });
   };
 
+  const handleDelete = () => {
+    if (confirm('Tem certeza que deseja excluir este bloco?')) {
+      onDeleteNode(selectedNode.id);
+    }
+  };
+
   return (
     <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-lg">Editar Bloco</CardTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleDelete}
+            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {selectedNode.type === 'send_message' && (
             <>
+              <div>
+                <Label>Instância WhatsApp</Label>
+                <Select
+                  value={selectedNode.data.instanceId || ''}
+                  onValueChange={(value) => handleChange('instanceId', value)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione uma instância" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {instances.length === 0 ? (
+                      <SelectItem value="no-instance" disabled>
+                        Nenhuma instância disponível
+                      </SelectItem>
+                    ) : (
+                      instances.map((instance) => (
+                        <SelectItem key={instance.id} value={instance.id!}>
+                          {instance.name} ({instance.instanceName})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Instância que enviará a mensagem
+                </p>
+              </div>
+
               <div>
                 <Label>Mensagem</Label>
                 <Textarea
@@ -43,7 +102,30 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
                   className="mt-1"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Use {'{{name}}'}, {'{{phone}}'} para personalizar
+                  Use {'{{name}}'}, {'{{phone}}'}, {'{{email}}'} para personalizar
+                </p>
+              </div>
+
+              <div>
+                <Label>Usar Lista de Contatos (Opcional)</Label>
+                <Select
+                  value={selectedNode.data.contactListId || ''}
+                  onValueChange={(value) => handleChange('contactListId', value)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Nenhuma (usar contexto)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Nenhuma (usar contexto)</SelectItem>
+                    {contactLists.map((list) => (
+                      <SelectItem key={list.id} value={list.id}>
+                        {list.name} ({list.contacts.length} contatos)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Se selecionado, enviará para todos os contatos da lista
                 </p>
               </div>
             </>
@@ -58,6 +140,7 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
                   value={selectedNode.data.delay || 30}
                   onChange={(e) => handleChange('delay', parseInt(e.target.value))}
                   className="mt-1"
+                  min={1}
                 />
               </div>
               <div>
@@ -90,8 +173,17 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
                   className="mt-1"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Ex: context.name == "João"
+                  Ex: context.name == "João" ou context.age {'>'} 18
                 </p>
+              </div>
+              <div className="bg-blue-50 p-3 rounded-md">
+                <p className="text-xs font-medium mb-2">Variáveis disponíveis:</p>
+                <ul className="text-xs space-y-1 text-gray-600">
+                  <li>• context.name - Nome do contato</li>
+                  <li>• context.phone - Telefone</li>
+                  <li>• context.email - Email</li>
+                  <li>• context.* - Qualquer campo customizado</li>
+                </ul>
               </div>
             </>
           )}
@@ -122,8 +214,50 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label>Body (JSON)</Label>
+                <Textarea
+                  value={selectedNode.data.body || ''}
+                  onChange={(e) => handleChange('body', e.target.value)}
+                  placeholder='{"key": "{{name}}"}'
+                  rows={3}
+                  className="mt-1 font-mono text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Suporta variáveis do contexto
+                </p>
+              </div>
             </>
           )}
+
+          {selectedNode.type === 'start' && (
+            <div className="bg-green-50 p-3 rounded-md">
+              <p className="text-sm font-medium text-green-800 mb-2">Bloco de Início</p>
+              <p className="text-xs text-gray-600">
+                Este é o ponto de partida do fluxo. Conecte-o aos próximos blocos para definir o caminho da automação.
+              </p>
+            </div>
+          )}
+
+          {selectedNode.type === 'end' && (
+            <div className="bg-red-50 p-3 rounded-md">
+              <p className="text-sm font-medium text-red-800 mb-2">Bloco de Fim</p>
+              <p className="text-xs text-gray-600">
+                Este bloco marca o final do fluxo. A execução será concluída quando chegar aqui.
+              </p>
+            </div>
+          )}
+
+          <div className="pt-4 border-t">
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={handleDelete}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Excluir Bloco
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

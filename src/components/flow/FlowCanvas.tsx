@@ -9,6 +9,7 @@ import ReactFlow, {
   Connection,
   Node,
   Edge,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { StartNode } from './nodes/StartNode';
@@ -99,6 +100,48 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
     onNodeSelect(null);
   }, [onNodeSelect]);
 
+  // Função para deletar nodes selecionados
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      const deletedIds = deleted.map(n => n.id);
+      
+      // Remover edges conectadas aos nodes deletados
+      const updatedEdges = edges.filter(
+        edge => !deletedIds.includes(edge.source) && !deletedIds.includes(edge.target)
+      );
+      
+      setEdges(updatedEdges);
+      onEdgesChange(updatedEdges as FlowEdge[]);
+      
+      // Se o node selecionado foi deletado, limpar seleção
+      if (deleted.some(n => n.id === (onNodeSelect as any).id)) {
+        onNodeSelect(null);
+      }
+    },
+    [edges, setEdges, onEdgesChange, onNodeSelect]
+  );
+
+  // Listener para teclas Delete/Backspace
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        const selectedNodes = nodes.filter((node: any) => node.selected);
+        if (selectedNodes.length > 0) {
+          event.preventDefault();
+          onNodesDelete(selectedNodes);
+          
+          // Remover os nodes selecionados
+          const updatedNodes = nodes.filter((node: any) => !node.selected);
+          setNodes(updatedNodes);
+          onNodesChange(updatedNodes as FlowNode[]);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [nodes, onNodesDelete, setNodes, onNodesChange]);
+
   React.useEffect(() => {
     onNodesChange(nodes as FlowNode[]);
   }, [nodes]);
@@ -120,8 +163,10 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onNodesDelete={onNodesDelete}
         nodeTypes={nodeTypes}
         fitView
+        deleteKeyCode={['Delete', 'Backspace']}
       >
         <Background />
         <Controls />

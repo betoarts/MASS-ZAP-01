@@ -10,9 +10,19 @@ export const SendMessageNode: React.FC<any> = ({ data }) => {
         <MessageCircle className="h-4 w-4 text-blue-700" />
         <div className="font-bold text-blue-700">Enviar Mensagem</div>
       </div>
+      {data.instanceId && (
+        <div className="text-[10px] text-blue-600 mb-1">
+          📱 Instância configurada
+        </div>
+      )}
       <div className="text-xs text-gray-600 truncate max-w-[180px]">
         {data.message || 'Configure a mensagem'}
       </div>
+      {data.contactListId && (
+        <div className="text-[10px] text-blue-600 mt-1">
+          👥 Lista de contatos selecionada
+        </div>
+      )}
       <Handle type="source" position={Position.Bottom} className="w-3 h-3" />
     </div>
   );
