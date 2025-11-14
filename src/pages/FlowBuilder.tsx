@@ -5,7 +5,7 @@ import { FlowCanvas } from '@/components/flow/FlowCanvas';
 import { NodeEditor } from '@/components/flow/NodeEditor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Save, Play, ArrowLeft, Info } from 'lucide-react';
+import { Save, Play, ArrowLeft, Info, ListChecks } from 'lucide-react';
 import { FlowNode, FlowEdge } from '@/lib/flow-types';
 import { getFlowById, updateFlow } from '@/lib/flow-storage';
 import { useSession } from '@/components/auth/SessionContextProvider';
@@ -127,6 +127,14 @@ const FlowBuilder: React.FC = () => {
           />
         </div>
         <div className="flex gap-2">
+          <Button 
+            onClick={() => navigate(`/flows/${flowId}/executions`)} 
+            variant="outline"
+            disabled={!flowId}
+          >
+            <ListChecks className="mr-2 h-4 w-4" />
+            Ver Execuções
+          </Button>
           <Button onClick={handleSave} disabled={isSaving} variant="outline">
             <Save className="mr-2 h-4 w-4" />
             {isSaving ? 'Salvando...' : 'Salvar'}
