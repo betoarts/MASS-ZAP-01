@@ -21,6 +21,7 @@ import {
   Briefcase,
   MessageCircle,
   Webhook,
+  Workflow,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -38,6 +39,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ onLinkClick }) => {
     { title: "Instâncias", href: "/instances", icon: Settings },
     { title: "Contatos", href: "/contacts", icon: Users },
     { title: "Campanhas", href: "/campaigns", icon: Send },
+    { title: "FlowZapp", href: "/flows", icon: Workflow },
     { title: "Clientes (CRM)", href: "/crm", icon: Briefcase },
     { title: "Webhooks", href: "/webhooks", icon: Webhook },
     { title: "Logs", href: "/logs", icon: FileText },

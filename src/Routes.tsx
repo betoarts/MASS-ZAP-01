@@ -12,10 +12,11 @@ import CRM from "./pages/CRM";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import WebhookConfig from "./pages/WebhookConfig";
+import FlowList from "./pages/FlowList";
+import FlowBuilder from "./pages/FlowBuilder";
 import { useSession } from "./components/auth/SessionContextProvider";
 import React from "react";
 
-// ProtectedRoute component to guard routes
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session, isLoading } = useSession();
 
@@ -24,7 +25,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   if (!session) {
-    // Redirect to login is handled by SessionContextProvider
     return null;
   }
 
@@ -134,7 +134,24 @@ export const Routes = () => (
         </ProtectedRoute>
       }
     />
-    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+    <Route
+      path="/flows"
+      element={
+        <ProtectedRoute>
+          <MainLayout>
+            <FlowList />
+          </MainLayout>
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/flows/:flowId"
+      element={
+        <ProtectedRoute>
+          <FlowBuilder />
+        </ProtectedRoute>
+      }
+    />
     <Route path="*" element={<NotFound />} />
   </ReactRoutes>
 );
