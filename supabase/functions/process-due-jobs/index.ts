@@ -10,6 +10,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Função auxiliar para adicionar logs de depuração no console do Deno
+const logDebug = (message: string, details?: any) => {
+    console.log(`[DEBUG] ${message}`, details ? JSON.stringify(details) : '');
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -24,6 +29,8 @@ serve(async (req) => {
   );
 
   try {
+    logDebug('Iniciando processamento de jobs pendentes.');
+    
     const { data: jobs, error: jobsError } = await supabase
       .from('jobs')
       .select('*')
@@ -31,14 +38,23 @@ serve(async (req) => {
       .lte('scheduled_at', new Date().toISOString())
       .limit(10);
 
-    if (jobsError || !jobs || jobs.length === 0) {
+    if (jobsError) {
+        logDebug('Erro ao buscar jobs:', jobsError);
+        throw new Error(`Erro ao buscar jobs: ${jobsError.message}`);
+    }
+
+    if (!jobs || jobs.length === 0) {
+      logDebug('Nenhum job para processar agora.');
       return new Response(JSON.stringify({ message: 'Nenhum job para processar' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       });
     }
 
+    logDebug(`Encontrados ${jobs.length} jobs para processar.`);
+
     for (const job of jobs) {
+      logDebug(`Processando job ID: ${job.id}, Tipo: ${job.node_type}`);
       try {
         await supabase
           .from('jobs')
@@ -51,36 +67,43 @@ serve(async (req) => {
           .eq('id', job.execution_id)
           .single();
 
-        if (!execution) continue;
+        if (!execution) {
+            logDebug(`Execução não encontrada para job ${job.id}`);
+            continue;
+        }
 
         const context = execution.context || {};
 
         if (job.node_type === 'send_message') {
           await processSendMessage(job, execution, context, supabase);
-          await scheduleNextNodes(job, execution, supabase); // Agendar próximo nó após sucesso
+          await scheduleNextNodes(job, execution, supabase);
         } else if (job.node_type === 'send_media') {
           await processSendMedia(job, execution, context, supabase);
-          await scheduleNextNodes(job, execution, supabase); // Agendar próximo nó após sucesso
+          await scheduleNextNodes(job, execution, supabase);
         } else if (job.node_type === 'wait') {
-          await processWait(job, execution, supabase); // Já agenda o próximo nó internamente
+          await processWait(job, execution, supabase);
         } else if (job.node_type === 'condition') {
-          await processCondition(job, execution, context, supabase); // Já agenda o próximo nó internamente
+          await processCondition(job, execution, context, supabase);
         } else if (job.node_type === 'webhook') {
           await processWebhook(job, execution, context, supabase);
-          await scheduleNextNodes(job, execution, supabase); // Agendar próximo nó após sucesso
+          await scheduleNextNodes(job, execution, supabase);
         } else if (job.node_type === 'end') {
-          await processEnd(job, execution, supabase); // Já finaliza a execução
+          await processEnd(job, execution, supabase);
         }
 
         await supabase
           .from('jobs')
           .update({ status: 'completed', processed_at: new Date().toISOString() })
           .eq('id', job.id);
+        
+        logDebug(`Job ${job.id} concluído com sucesso.`);
 
       } catch (error: any) {
-        console.error('Erro processando job:', error);
+        console.error(`Erro processando job ${job.id}:`, error);
         
         const newRetryCount = job.retry_count + 1;
+        const errorMessage = error.message || 'Erro desconhecido';
+
         if (newRetryCount < job.max_retries) {
           const backoffSeconds = Math.pow(2, newRetryCount) * 60;
           const nextSchedule = new Date(Date.now() + backoffSeconds * 1000).toISOString();
@@ -91,23 +114,25 @@ serve(async (req) => {
               status: 'pending',
               retry_count: newRetryCount,
               scheduled_at: nextSchedule,
-              error_message: error.message,
+              error_message: errorMessage,
             })
             .eq('id', job.id);
+          logDebug(`Job ${job.id} falhou. Reagendado para ${nextSchedule} (Tentativa ${newRetryCount}).`);
         } else {
           await supabase
             .from('jobs')
             .update({
               status: 'failed',
-              error_message: error.message,
+              error_message: errorMessage,
               processed_at: new Date().toISOString(),
             })
             .eq('id', job.id);
 
           await supabase
             .from('executions')
-            .update({ status: 'failed', error_message: error.message })
+            .update({ status: 'failed', error_message: `Falha no nó ${job.node_type}: ${errorMessage}` })
             .eq('id', job.execution_id);
+          logDebug(`Job ${job.id} falhou permanentemente.`);
         }
       }
     }
@@ -117,6 +142,7 @@ serve(async (req) => {
       status: 200,
     });
   } catch (error: any) {
+    console.error('Erro global no processador de jobs:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -208,6 +234,7 @@ async function fetchInstanceAndContacts(job: any, userId: string, supabase: any)
 }
 
 async function processSendMessage(job: any, execution: any, context: any, supabase: any) {
+  logDebug(`Iniciando processSendMessage para job ${job.id}`);
   const { instance, contacts } = await fetchInstanceAndContacts(job, job.user_id, supabase);
   
   const messagesToSend = getMessageContexts(
@@ -217,7 +244,7 @@ async function processSendMessage(job: any, execution: any, context: any, supaba
   );
 
   if (messagesToSend.length === 0 && job.node_data.contactListId) {
-    // Se a lista estava configurada, mas vazia, não é um erro fatal.
+    logDebug(`Lista de contatos configurada, mas vazia. Job ${job.id} concluído sem envio.`);
     return; 
   }
   if (messagesToSend.length === 0 && !context.phone) {
@@ -225,15 +252,18 @@ async function processSendMessage(job: any, execution: any, context: any, supaba
   }
 
   for (const { instance, context: msgContext, message } of messagesToSend) {
+    logDebug(`Enviando texto para ${msgContext.phone}`);
     await sendText(instance, msgContext, message);
     if (messagesToSend.length > 1) {
         // Adiciona um pequeno delay entre mensagens se for envio em massa
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
+  logDebug(`processSendMessage para job ${job.id} concluído.`);
 }
 
 async function processSendMedia(job: any, execution: any, context: any, supabase: any) {
+  logDebug(`Iniciando processSendMedia para job ${job.id}`);
   const { instance, contacts } = await fetchInstanceAndContacts(job, job.user_id, supabase);
   
   const messagesToSend = getMessageContexts(
@@ -243,6 +273,7 @@ async function processSendMedia(job: any, execution: any, context: any, supabase
   );
 
   if (messagesToSend.length === 0 && job.node_data.contactListId) {
+    logDebug(`Lista de contatos configurada, mas vazia. Job ${job.id} concluído sem envio.`);
     return; 
   }
   if (messagesToSend.length === 0 && !context.phone) {
@@ -253,12 +284,14 @@ async function processSendMedia(job: any, execution: any, context: any, supabase
   }
 
   for (const { instance, context: msgContext, mediaUrl, mediaCaption } of messagesToSend) {
+    logDebug(`Enviando mídia para ${msgContext.phone} com URL: ${mediaUrl}`);
     await sendMedia(instance, msgContext, mediaUrl!, mediaCaption);
     if (messagesToSend.length > 1) {
         // Adiciona um pequeno delay entre mensagens se for envio em massa
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
+  logDebug(`processSendMedia para job ${job.id} concluído.`);
 }
 
 async function sendText(instance: any, context: any, message: string) {
@@ -347,6 +380,7 @@ async function processWait(job: any, execution: any, supabase: any) {
   if (delayUnit === 'hours') delayMs = delay * 60 * 60 * 1000;
 
   const nextSchedule = new Date(Date.now() + delayMs).toISOString();
+  logDebug(`Nó Wait: Agendando próximo nó para ${nextSchedule}`);
 
   const flow = execution.flows;
   const nextEdges = flow.edges.filter((e: any) => e.source === job.node_id);
@@ -372,7 +406,6 @@ async function processCondition(job: any, execution: any, context: any, supabase
   
   let result = false;
   try {
-    // JEXL espera que o contexto seja passado diretamente
     result = await jexl.eval(expression, context);
   } catch (error) {
     console.error('Erro ao avaliar expressão:', error);
@@ -381,6 +414,8 @@ async function processCondition(job: any, execution: any, context: any, supabase
 
   const flow = execution.flows;
   const handleId = result ? 'true' : 'false';
+  logDebug(`Nó Condition: Expressão "${expression}" avaliada como ${result}. Seguindo handle: ${handleId}`);
+
   const nextEdge = flow.edges.find((e: any) => e.source === job.node_id && e.sourceHandle === handleId);
   
   if (nextEdge) {
@@ -406,12 +441,13 @@ async function processWebhook(job: any, execution: any, context: any, supabase: 
   
   // Substituir variáveis no body
   for (const key in context) {
-    // Garante que apenas strings sejam usadas para substituição e evita substituição de objetos complexos
     if (typeof context[key] === 'string' || typeof context[key] === 'number') {
         body = body.replace(new RegExp(`{{${key}}}`, 'g'), String(context[key]));
     }
   }
   
+  logDebug(`Nó Webhook: Enviando ${method} para ${url}`);
+
   const response = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -424,6 +460,7 @@ async function processWebhook(job: any, execution: any, context: any, supabase: 
 }
 
 async function processEnd(job: any, execution: any, supabase: any) {
+  logDebug(`Nó End: Finalizando execução ${job.execution_id}`);
   await supabase
     .from('executions')
     .update({
@@ -437,9 +474,16 @@ async function scheduleNextNodes(job: any, execution: any, supabase: any) {
   const flow = execution.flows;
   const nextEdges = flow.edges.filter((e: any) => e.source === job.node_id);
   
+  if (nextEdges.length === 0) {
+    logDebug(`Nó ${job.node_type} (${job.node_id}) não tem conexões de saída. Finalizando caminho.`);
+    // Se não houver próximo nó, e não for um nó 'end', o caminho simplesmente termina aqui.
+    return;
+  }
+
   for (const edge of nextEdges) {
     const nextNode = flow.nodes.find((n: any) => n.id === edge.target);
     if (nextNode) {
+      logDebug(`Agendando próximo nó: ${nextNode.type} (${nextNode.id})`);
       await supabase.from('jobs').insert({
         user_id: job.user_id,
         execution_id: job.execution_id,
