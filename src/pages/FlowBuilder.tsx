@@ -156,7 +156,7 @@ const FlowBuilder: React.FC = () => {
           <Info className="h-4 w-4 text-blue-600" />
           <AlertDescription className="text-sm text-blue-800">
             <strong>Dica:</strong> Arraste blocos da barra lateral, conecte-os e configure clicando neles. 
-            Use <kbd className="px-1 py-0.5 bg-white border rounded text-xs">Delete</kbd> ou <kbd className="px-1 py-0.5 bg-white border rounded text-xs">Backspace</kbd> para excluir blocos selecionados.
+            Use o botão "Excluir Bloco" no painel lateral para remover blocos.
           </AlertDescription>
         </Alert>
       </div>
@@ -165,8 +165,8 @@ const FlowBuilder: React.FC = () => {
       <div className="flex flex-1 overflow-hidden">
         <FlowSidebar />
         <FlowCanvas
-          initialNodes={nodes}
-          initialEdges={edges}
+          nodes={nodes}
+          edges={edges}
           onNodesChange={setNodes}
           onEdgesChange={setEdges}
           onNodeSelect={setSelectedNode}

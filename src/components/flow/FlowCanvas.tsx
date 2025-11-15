@@ -6,8 +6,6 @@ import ReactFlow, {
   addEdge,
   applyNodeChanges,
   applyEdgeChanges,
-  useNodesState,
-  useEdgesState,
   Connection,
   Node,
   Edge,
@@ -33,33 +31,29 @@ const nodeTypes = {
 };
 
 interface FlowCanvasProps {
-  initialNodes: FlowNode[];
-  initialEdges: FlowEdge[];
+  nodes: FlowNode[];
+  edges: FlowEdge[];
   onNodesChange: (nodes: FlowNode[]) => void;
   onEdgesChange: (edges: FlowEdge[]) => void;
   onNodeSelect: (node: FlowNode | null) => void;
 }
 
 export const FlowCanvas: React.FC<FlowCanvasProps> = ({
-  initialNodes,
-  initialEdges,
+  nodes,
+  edges,
   onNodesChange,
   onEdgesChange,
   onNodeSelect,
 }) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes as Node[]);
-  const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges as Edge[]);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
-  const [isDragging, setIsDragging] = useState(false);
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdges = addEdge(params, edges);
-      setEdges(newEdges);
+      const newEdges = addEdge(params, edges as Edge[]);
       onEdgesChange(newEdges as FlowEdge[]);
     },
-    [edges, setEdges, onEdgesChange]
+    [edges, onEdgesChange]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -86,11 +80,10 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
         data: { label: type },
       };
 
-      const updatedNodes = [...nodes, newNode as Node];
-      setNodes(updatedNodes);
-      onNodesChange(updatedNodes as FlowNode[]);
+      const updatedNodes = [...nodes, newNode];
+      onNodesChange(updatedNodes);
     },
-    [reactFlowInstance, nodes, setNodes, onNodesChange]
+    [reactFlowInstance, nodes, onNodesChange]
   );
 
   const onNodeClick = useCallback(
@@ -104,7 +97,6 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
     onNodeSelect(null);
   }, [onNodeSelect]);
 
-  // A função onNodesDelete é mantida, mas só será chamada se for explicitamente acionada (o que não acontece por padrão sem deleteKeyCode)
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
       const deletedIds = deleted.map(n => n.id);
@@ -114,7 +106,6 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
         edge => !deletedIds.includes(edge.source) && !deletedIds.includes(edge.target)
       );
       
-      setEdges(updatedEdges);
       onEdgesChange(updatedEdges as FlowEdge[]);
       
       // Se o node selecionado foi deletado, limpar seleção
@@ -122,52 +113,32 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
         onNodeSelect(null);
       }
     },
-    [edges, setEdges, onEdgesChange, onNodeSelect]
+    [edges, onEdgesChange, onNodeSelect]
   );
-
-  // Removido: Listener para teclas Delete/Backspace
 
   const handleNodesChange = useCallback(
     (changes: any) => {
-      setNodes((nds) => {
-        const next = applyNodeChanges(changes, nds);
-        onNodesChange(next as FlowNode[]);
-        return next;
-      });
+      const next = applyNodeChanges(changes, nodes as Node[]);
+      onNodesChange(next as FlowNode[]);
     },
-    [onNodesChange]
+    [nodes, onNodesChange]
   );
 
   const handleEdgesChange = useCallback(
     (changes: any) => {
-      setEdges((eds) => {
-        const next = applyEdgeChanges(changes, eds);
-        onEdgesChange(next as FlowEdge[]);
-        return next;
-      });
+      const next = applyEdgeChanges(changes, edges as Edge[]);
+      onEdgesChange(next as FlowEdge[]);
     },
-    [onEdgesChange]
+    [edges, onEdgesChange]
   );
-
-  React.useEffect(() => {
-    if (!isDragging) {
-      setNodes(initialNodes as Node[]);
-    }
-  }, [initialNodes, isDragging]);
-
-  React.useEffect(() => {
-    if (!isDragging) {
-      setEdges(initialEdges as Edge[]);
-    }
-  }, [initialEdges, isDragging]);
 
   return (
     <div ref={reactFlowWrapper} className="flex-1 h-full">
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={handleNodesChange} // Usando handleNodesChange para garantir que o estado externo seja atualizado
-        onEdgesChange={handleEdgesChange} // Usando handleEdgesChange para garantir que o estado externo seja atualizado
+        nodes={nodes as Node[]}
+        edges={edges as Edge[]}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         onInit={setReactFlowInstance}
         onDrop={onDrop}
@@ -177,7 +148,6 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
         onNodesDelete={onNodesDelete}
         nodeTypes={nodeTypes}
         fitView
-        // Removido: deleteKeyCode={['Delete', 'Backspace']}
       >
         <Background />
         <Controls />
