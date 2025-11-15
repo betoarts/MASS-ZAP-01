@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { Flow, FlowNode, FlowEdge, Execution } from './flow-types';
+import { Flow, FlowNode, FlowEdge, Execution, Job } from './flow-types';
 
 export const getFlows = async (userId: string): Promise<Flow[]> => {
   const { data, error } = await supabase
@@ -100,4 +100,32 @@ export const getExecutions = async (flowId: string): Promise<Execution[]> => {
     return [];
   }
   return data as Execution[];
+};
+
+export const getExecutionById = async (executionId: string): Promise<Execution | null> => {
+  const { data, error } = await supabase
+    .from('executions')
+    .select('*')
+    .eq('id', executionId)
+    .single();
+
+  if (error) {
+    console.error('Error fetching execution by ID:', error);
+    return null;
+  }
+  return data as Execution;
+};
+
+export const getJobsByExecutionId = async (executionId: string): Promise<Job[]> => {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('*')
+    .eq('execution_id', executionId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching jobs by execution ID:', error);
+    return [];
+  }
+  return data as Job[];
 };

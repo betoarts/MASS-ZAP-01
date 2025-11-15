@@ -14,7 +14,8 @@ import Login from "./pages/Login";
 import WebhookConfig from "./pages/WebhookConfig";
 import FlowList from "./pages/FlowList";
 import FlowBuilder from "./pages/FlowBuilder";
-import FlowExecutions from "./pages/FlowExecutions"; // Importar nova página
+import FlowExecutions from "./pages/FlowExecutions";
+import FlowExecutionDetails from "./pages/FlowExecutionDetails"; // Importar nova página
 import { useSession } from "./components/auth/SessionContextProvider";
 import React from "react";
 
@@ -159,6 +160,16 @@ export const Routes = () => (
         <ProtectedRoute>
           <MainLayout>
             <FlowExecutions />
+          </MainLayout>
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/flows/:flowId/executions/:executionId"
+      element={
+        <ProtectedRoute>
+          <MainLayout>
+            <FlowExecutionDetails />
           </MainLayout>
         </ProtectedRoute>
       }

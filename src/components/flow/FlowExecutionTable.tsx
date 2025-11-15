@@ -16,6 +16,7 @@ import { ptBR } from "date-fns/locale";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 
 interface FlowExecutionTableProps {
   executions: Execution[];
@@ -23,6 +24,9 @@ interface FlowExecutionTableProps {
 }
 
 export const FlowExecutionTable: React.FC<FlowExecutionTableProps> = ({ executions, isLoading }) => {
+  const navigate = useNavigate();
+  const { flowId } = useParams<{ flowId: string }>();
+
   const getStatusBadge = (status: Execution['status']) => {
     switch (status) {
       case 'running':
@@ -33,6 +37,12 @@ export const FlowExecutionTable: React.FC<FlowExecutionTableProps> = ({ executio
         return <Badge variant="destructive">Falha</Badge>;
       default:
         return <Badge variant="secondary">Desconhecido</Badge>;
+    }
+  };
+
+  const handleViewDetails = (executionId: string) => {
+    if (flowId) {
+      navigate(`/flows/${flowId}/executions/${executionId}`);
     }
   };
 
@@ -80,13 +90,12 @@ export const FlowExecutionTable: React.FC<FlowExecutionTableProps> = ({ executio
                       <Button
                         variant="ghost"
                         size="icon"
-                        // TODO: Implementar visualização de jobs/contexto detalhado
-                        onClick={() => console.log("Ver detalhes da execução:", exec)}
+                        onClick={() => handleViewDetails(exec.id)}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Ver Contexto</TooltipContent>
+                    <TooltipContent>Ver Detalhes e Jobs</TooltipContent>
                   </Tooltip>
                 </TableCell>
               </TableRow>
