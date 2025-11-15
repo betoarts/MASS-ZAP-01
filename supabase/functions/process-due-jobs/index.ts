@@ -135,12 +135,14 @@ function getMessageContexts(job: any, context: any, contacts: any[]): { instance
   const instance = job.instance;
 
   if (contacts.length > 0) {
+    // Se houver lista de contatos, iteramos sobre eles
     for (const contact of contacts) {
       const baseContext = { ...context };
       
       const fullName = contact.full_name || contact.first_name || '';
       const firstName = contact.first_name || fullName.split(' ')[0] || 'Amigo';
 
+      // Contexto específico do contato
       const replacementContext = {
         phone: contact.phone_number,
         nome_completo: fullName,
@@ -148,11 +150,12 @@ function getMessageContexts(job: any, context: any, contacts: any[]): { instance
         ...contact.custom_data,
       };
       
+      // O contexto final para substituição é a união do contexto da execução e do contexto do contato
       const finalContext = { ...baseContext, ...replacementContext };
       messagesToSend.push({ instance, context: finalContext, message, mediaUrl, mediaCaption });
     }
   } else {
-    // Enviar apenas para o contexto atual
+    // Se não houver lista, enviamos apenas para o contexto da execução (assumindo que 'phone' está lá)
     const baseContext = { ...context };
     
     const name = baseContext.name || baseContext.fullName || baseContext.nome_completo || '';
@@ -190,9 +193,10 @@ async function fetchInstanceAndContacts(job: any, userId: string, supabase: any)
 
   let contacts = [];
   if (contactListId) {
+    // Busca contatos da lista, garantindo que o usuário tem permissão (RLS)
     const { data: fetchedContacts } = await supabase
       .from('contacts')
-      .select('*')
+      .select('id, phone_number, full_name, first_name, custom_data')
       .eq('contact_list_id', contactListId);
     
     contacts = fetchedContacts || [];
@@ -214,7 +218,8 @@ async function processSendMessage(job: any, context: any, supabase: any) {
   );
 
   if (messagesToSend.length === 0 && job.node_data.contactListId) {
-    return; // Lista vazia, não é um erro fatal
+    // Se a lista estava configurada, mas vazia, não é um erro fatal.
+    return; 
   }
   if (messagesToSend.length === 0 && !context.phone) {
     throw new Error('Número de telefone não encontrado no contexto para envio individual.');
@@ -223,6 +228,7 @@ async function processSendMessage(job: any, context: any, supabase: any) {
   for (const { instance, context: msgContext, message } of messagesToSend) {
     await sendText(instance, msgContext, message);
     if (messagesToSend.length > 1) {
+        // Adiciona um pequeno delay entre mensagens se for envio em massa
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
@@ -238,7 +244,7 @@ async function processSendMedia(job: any, context: any, supabase: any) {
   );
 
   if (messagesToSend.length === 0 && job.node_data.contactListId) {
-    return; // Lista vazia, não é um erro fatal
+    return; 
   }
   if (messagesToSend.length === 0 && !context.phone) {
     throw new Error('Número de telefone não encontrado no contexto para envio individual.');
@@ -250,6 +256,7 @@ async function processSendMedia(job: any, context: any, supabase: any) {
   for (const { instance, context: msgContext, mediaUrl, mediaCaption } of messagesToSend) {
     await sendMedia(instance, msgContext, mediaUrl!, mediaCaption);
     if (messagesToSend.length > 1) {
+        // Adiciona um pequeno delay entre mensagens se for envio em massa
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
@@ -258,6 +265,7 @@ async function processSendMedia(job: any, context: any, supabase: any) {
 async function sendText(instance: any, context: any, message: string) {
   let finalMessage = message;
   
+  // Substituição de variáveis
   for (const key in context) {
     if (typeof context[key] === 'string' || typeof context[key] === 'number') {
         finalMessage = finalMessage.replace(new RegExp(`{{${key}}}`, 'g'), String(context[key]));
@@ -285,13 +293,14 @@ async function sendText(instance: any, context: any, message: string) {
 
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(`Erro ao enviar mensagem de texto: ${errorBody}`);
+    throw new Error(`Erro ao enviar mensagem de texto para ${phoneNumber}: ${errorBody}`);
   }
 }
 
 async function sendMedia(instance: any, context: any, mediaUrl: string, mediaCaption?: string) {
   let finalCaption = mediaCaption || '';
   
+  // Substituição de variáveis na legenda
   for (const key in context) {
     if (typeof context[key] === 'string' || typeof context[key] === 'number') {
         finalCaption = finalCaption.replace(new RegExp(`{{${key}}}`, 'g'), String(context[key]));
@@ -326,7 +335,7 @@ async function sendMedia(instance: any, context: any, mediaUrl: string, mediaCap
 
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(`Erro ao enviar mídia: ${errorBody}`);
+    throw new Error(`Erro ao enviar mídia para ${phoneNumber}: ${errorBody}`);
   }
 }
 
