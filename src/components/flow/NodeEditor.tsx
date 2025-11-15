@@ -59,6 +59,62 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
     return value || 'none';
   };
 
+  const renderContactListSelect = (field: string) => (
+    <div>
+      <Label>Usar Lista de Contatos (Opcional)</Label>
+      <Select
+        value={getSelectValue(selectedNode.data[field])}
+        onValueChange={(value) => handleSelectChange(field, value)}
+      >
+        <SelectTrigger className="mt-1">
+          <SelectValue placeholder="Nenhuma (usar contexto)" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Nenhuma (usar contexto)</SelectItem>
+          {contactLists.map((list) => (
+            <SelectItem key={list.id} value={list.id}>
+              {list.name} ({list.contacts.length} contatos)
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-gray-500 mt-1">
+        Se selecionado, enviará para todos os contatos da lista
+      </p>
+    </div>
+  );
+
+  const renderInstanceSelect = (field: string) => (
+    <div>
+      <Label>Instância WhatsApp</Label>
+      <Select
+        value={getSelectValue(selectedNode.data[field])}
+        onValueChange={(value) => handleSelectChange(field, value)}
+      >
+        <SelectTrigger className="mt-1">
+          <SelectValue placeholder="Selecione uma instância" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Nenhuma</SelectItem>
+          {instances.length === 0 ? (
+            <SelectItem value="no-instance" disabled>
+              Nenhuma instância disponível
+            </SelectItem>
+          ) : (
+            instances.map((instance) => (
+              <SelectItem key={instance.id} value={instance.id!}>
+                {instance.name} ({instance.instanceName})
+              </SelectItem>
+            ))
+          )}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-gray-500 mt-1">
+        Instância que enviará a mensagem
+      </p>
+    </div>
+  );
+
   return (
     <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
       <Card>
@@ -74,36 +130,10 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* SEND MESSAGE NODE */}
           {selectedNode.type === 'send_message' && (
             <>
-              <div>
-                <Label>Instância WhatsApp</Label>
-                <Select
-                  value={getSelectValue(selectedNode.data.instanceId)}
-                  onValueChange={(value) => handleSelectChange('instanceId', value)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione uma instância" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhuma</SelectItem>
-                    {instances.length === 0 ? (
-                      <SelectItem value="no-instance" disabled>
-                        Nenhuma instância disponível
-                      </SelectItem>
-                    ) : (
-                      instances.map((instance) => (
-                        <SelectItem key={instance.id} value={instance.id!}>
-                          {instance.name} ({instance.instanceName})
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Instância que enviará a mensagem
-                </p>
-              </div>
+              {renderInstanceSelect('instanceId')}
 
               <div>
                 <Label>Mensagem</Label>
@@ -119,31 +149,47 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
                 </p>
               </div>
 
-              <div>
-                <Label>Usar Lista de Contatos (Opcional)</Label>
-                <Select
-                  value={getSelectValue(selectedNode.data.contactListId)}
-                  onValueChange={(value) => handleSelectChange('contactListId', value)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Nenhuma (usar contexto)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhuma (usar contexto)</SelectItem>
-                    {contactLists.map((list) => (
-                      <SelectItem key={list.id} value={list.id}>
-                        {list.name} ({list.contacts.length} contatos)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Se selecionado, enviará para todos os contatos da lista
-                </p>
-              </div>
+              {renderContactListSelect('contactListId')}
             </>
           )}
 
+          {/* SEND MEDIA NODE */}
+          {selectedNode.type === 'send_media' && (
+            <>
+              {renderInstanceSelect('instanceId')}
+
+              <div>
+                <Label>URL da Mídia</Label>
+                <Input
+                  value={selectedNode.data.mediaUrl || ''}
+                  onChange={(e) => handleChange('mediaUrl', e.target.value)}
+                  placeholder="https://exemplo.com/imagem.jpg"
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  URL completa da imagem, vídeo ou documento.
+                </p>
+              </div>
+
+              <div>
+                <Label>Legenda (Opcional)</Label>
+                <Textarea
+                  value={selectedNode.data.mediaCaption || ''}
+                  onChange={(e) => handleChange('mediaCaption', e.target.value)}
+                  placeholder="Confira este anexo, {{primeiro_nome}}!"
+                  rows={2}
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Suporta variáveis de personalização.
+                </p>
+              </div>
+
+              {renderContactListSelect('contactListId')}
+            </>
+          )}
+
+          {/* WAIT NODE */}
           {selectedNode.type === 'wait' && (
             <>
               <div>
@@ -175,6 +221,7 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
             </>
           )}
 
+          {/* CONDITION NODE */}
           {selectedNode.type === 'condition' && (
             <>
               <div>
@@ -201,6 +248,7 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
             </>
           )}
 
+          {/* WEBHOOK NODE */}
           {selectedNode.type === 'webhook' && (
             <>
               <div>
@@ -243,6 +291,7 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
             </>
           )}
 
+          {/* START NODE */}
           {selectedNode.type === 'start' && (
             <div className="bg-green-50 p-3 rounded-md">
               <p className="text-sm font-medium text-green-800 mb-2">Bloco de Início</p>
@@ -252,6 +301,7 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
             </div>
           )}
 
+          {/* END NODE */}
           {selectedNode.type === 'end' && (
             <div className="bg-red-50 p-3 rounded-md">
               <p className="text-sm font-medium text-red-800 mb-2">Bloco de Fim</p>

@@ -1,10 +1,11 @@
 import React from 'react';
-import { Play, MessageCircle, Clock, GitBranch, Webhook, Square } from 'lucide-react';
+import { Play, MessageCircle, Clock, GitBranch, Webhook, Square, Image } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 const nodeTypes = [
   { type: 'start', label: 'Início', icon: Play, color: 'bg-green-100 border-green-400 text-green-700' },
-  { type: 'send_message', label: 'Enviar Mensagem', icon: MessageCircle, color: 'bg-blue-100 border-blue-400 text-blue-700' },
+  { type: 'send_message', label: 'Enviar Texto', icon: MessageCircle, color: 'bg-blue-100 border-blue-400 text-blue-700' },
+  { type: 'send_media', label: 'Enviar Mídia', icon: Image, color: 'bg-pink-100 border-pink-400 text-pink-700' },
   { type: 'wait', label: 'Aguardar', icon: Clock, color: 'bg-yellow-100 border-yellow-400 text-yellow-700' },
   { type: 'condition', label: 'Condição', icon: GitBranch, color: 'bg-purple-100 border-purple-400 text-purple-700' },
   { type: 'webhook', label: 'Webhook', icon: Webhook, color: 'bg-orange-100 border-orange-400 text-orange-700' },

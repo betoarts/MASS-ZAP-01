@@ -57,6 +57,8 @@ serve(async (req) => {
 
         if (job.node_type === 'send_message') {
           await processSendMessage(job, context, supabase);
+        } else if (job.node_type === 'send_media') {
+          await processSendMedia(job, context, supabase);
         } else if (job.node_type === 'wait') {
           await processWait(job, execution, supabase);
         } else if (job.node_type === 'condition') {
@@ -72,7 +74,7 @@ serve(async (req) => {
           .update({ status: 'completed', processed_at: new Date().toISOString() })
           .eq('id', job.id);
 
-        if (job.node_type !== 'wait' && job.node_type !== 'end') {
+        if (job.node_type !== 'wait' && job.node_type !== 'end' && job.node_type !== 'condition') {
           await scheduleNextNodes(job, execution, supabase);
         }
 
@@ -123,44 +125,19 @@ serve(async (req) => {
   }
 });
 
-async function processSendMessage(job: any, context: any, supabase: any) {
-  const message = job.node_data.message || '';
-  const instanceId = job.node_data.instanceId;
-  const contactListId = job.node_data.contactListId;
+// --- Funções Auxiliares ---
 
-  if (!instanceId) {
-    throw new Error('Instância não configurada no bloco de mensagem');
-  }
-
-  // Buscar instância específica
-  const { data: instance, error: instanceError } = await supabase
-    .from('instances')
-    .select('*')
-    .eq('id', instanceId)
-    .single();
-
-  if (instanceError || !instance) {
-    throw new Error('Instância não encontrada');
-  }
-
+function getMessageContexts(job: any, context: any, contacts: any[]): { instance: any, context: any, message: string, mediaUrl?: string, mediaCaption?: string }[] {
   const messagesToSend = [];
+  const message = job.node_data.message || '';
+  const mediaUrl = job.node_data.mediaUrl;
+  const mediaCaption = job.node_data.mediaCaption;
+  const instance = job.instance;
 
-  // Se tem lista de contatos, enviar para todos
-  if (contactListId) {
-    const { data: contacts } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('contact_list_id', contactListId);
-
-    if (!contacts || contacts.length === 0) {
-      // Não é um erro fatal se a lista estiver vazia, apenas não envia nada.
-      return;
-    }
-
+  if (contacts.length > 0) {
     for (const contact of contacts) {
       const baseContext = { ...context };
       
-      // Standardize contact data for replacement using standard placeholders
       const fullName = contact.full_name || contact.first_name || '';
       const firstName = contact.first_name || fullName.split(' ')[0] || 'Amigo';
 
@@ -172,41 +149,116 @@ async function processSendMessage(job: any, context: any, supabase: any) {
       };
       
       const finalContext = { ...baseContext, ...replacementContext };
-      messagesToSend.push({ instance, context: finalContext, message });
+      messagesToSend.push({ instance, context: finalContext, message, mediaUrl, mediaCaption });
     }
   } else {
-    // Enviar apenas para o contexto atual (assumindo que 'phone' está em context)
+    // Enviar apenas para o contexto atual
     const baseContext = { ...context };
     
-    // Standardize context data for replacement
     const name = baseContext.name || baseContext.fullName || baseContext.nome_completo || '';
     const firstName = baseContext.firstName || baseContext.primeiro_nome || name.split(' ')[0] || 'Amigo';
 
     const replacementContext = {
-      phone: baseContext.phone, // Assumes phone is present in context
+      phone: baseContext.phone,
       nome_completo: name,
       primeiro_nome: firstName,
     };
     
     const finalContext = { ...baseContext, ...replacementContext };
-    messagesToSend.push({ instance, context: finalContext, message });
+    messagesToSend.push({ instance, context: finalContext, message, mediaUrl, mediaCaption });
+  }
+  return messagesToSend;
+}
+
+async function fetchInstanceAndContacts(job: any, userId: string, supabase: any) {
+  const instanceId = job.node_data.instanceId;
+  const contactListId = job.node_data.contactListId;
+
+  if (!instanceId) {
+    throw new Error('Instância não configurada no bloco');
+  }
+
+  const { data: instance, error: instanceError } = await supabase
+    .from('instances')
+    .select('*')
+    .eq('id', instanceId)
+    .single();
+
+  if (instanceError || !instance) {
+    throw new Error('Instância não encontrada');
+  }
+
+  let contacts = [];
+  if (contactListId) {
+    const { data: fetchedContacts } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('contact_list_id', contactListId);
+    
+    contacts = fetchedContacts || [];
+  } else if (job.node_type === 'send_message' || job.node_type === 'send_media') {
+    // Se não há lista, mas é um nó de envio, tentamos enviar para o contexto (1 contato)
+    contacts = []; 
+  }
+
+  return { instance, contacts };
+}
+
+async function processSendMessage(job: any, context: any, supabase: any) {
+  const { instance, contacts } = await fetchInstanceAndContacts(job, job.user_id, supabase);
+  
+  const messagesToSend = getMessageContexts(
+    { ...job, instance }, 
+    context, 
+    contacts
+  );
+
+  if (messagesToSend.length === 0 && job.node_data.contactListId) {
+    return; // Lista vazia, não é um erro fatal
+  }
+  if (messagesToSend.length === 0 && !context.phone) {
+    throw new Error('Número de telefone não encontrado no contexto para envio individual.');
   }
 
   for (const { instance, context: msgContext, message } of messagesToSend) {
-    await sendMessage(instance, msgContext, message);
-    // Delay entre mensagens (apenas se houver mais de uma mensagem)
+    await sendText(instance, msgContext, message);
     if (messagesToSend.length > 1) {
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
 }
 
-async function sendMessage(instance: any, context: any, message: string) {
+async function processSendMedia(job: any, context: any, supabase: any) {
+  const { instance, contacts } = await fetchInstanceAndContacts(job, job.user_id, supabase);
+  
+  const messagesToSend = getMessageContexts(
+    { ...job, instance }, 
+    context, 
+    contacts
+  );
+
+  if (messagesToSend.length === 0 && job.node_data.contactListId) {
+    return; // Lista vazia, não é um erro fatal
+  }
+  if (messagesToSend.length === 0 && !context.phone) {
+    throw new Error('Número de telefone não encontrado no contexto para envio individual.');
+  }
+  if (!job.node_data.mediaUrl) {
+    throw new Error('URL da mídia não configurada.');
+  }
+
+  for (const { instance, context: msgContext, mediaUrl, mediaCaption } of messagesToSend) {
+    await sendMedia(instance, msgContext, mediaUrl!, mediaCaption);
+    if (messagesToSend.length > 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+}
+
+async function sendText(instance: any, context: any, message: string) {
   let finalMessage = message;
   
-  // Substituir variáveis no message
   for (const key in context) {
-    // Garante que apenas strings sejam usadas para substituição e evita substituição de objetos complexos
     if (typeof context[key] === 'string' || typeof context[key] === 'number') {
         finalMessage = finalMessage.replace(new RegExp(`{{${key}}}`, 'g'), String(context[key]));
     }
@@ -233,7 +285,48 @@ async function sendMessage(instance: any, context: any, message: string) {
 
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(`Erro ao enviar mensagem: ${errorBody}`);
+    throw new Error(`Erro ao enviar mensagem de texto: ${errorBody}`);
+  }
+}
+
+async function sendMedia(instance: any, context: any, mediaUrl: string, mediaCaption?: string) {
+  let finalCaption = mediaCaption || '';
+  
+  for (const key in context) {
+    if (typeof context[key] === 'string' || typeof context[key] === 'number') {
+        finalCaption = finalCaption.replace(new RegExp(`{{${key}}}`, 'g'), String(context[key]));
+    }
+  }
+
+  const phoneNumber = context.phone || '';
+  if (!phoneNumber) {
+    throw new Error('Número de telefone não encontrado no contexto');
+  }
+
+  const evolutionMediaApiUrl = `${instance.url}/message/sendMedia/${instance.instance_name}`;
+  
+  const mediaType = mediaUrl.includes('.mp4') ? 'video' : mediaUrl.includes('.pdf') ? 'document' : 'image';
+
+  const mediaPayload = {
+    number: phoneNumber,
+    mediatype: mediaType,
+    media: mediaUrl,
+    caption: finalCaption,
+    delay: 1200,
+  };
+
+  const response = await fetch(evolutionMediaApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': instance.api_key,
+    },
+    body: JSON.stringify(mediaPayload),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Erro ao enviar mídia: ${errorBody}`);
   }
 }
 

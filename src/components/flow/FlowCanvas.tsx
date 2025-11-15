@@ -14,6 +14,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { StartNode } from './nodes/StartNode';
 import { SendMessageNode } from './nodes/SendMessageNode';
+import { SendMediaNode } from './nodes/SendMediaNode';
 import { WaitNode } from './nodes/WaitNode';
 import { ConditionNode } from './nodes/ConditionNode';
 import { WebhookNode } from './nodes/WebhookNode';
@@ -23,6 +24,7 @@ import { FlowNode, FlowEdge } from '@/lib/flow-types';
 const nodeTypes = {
   start: StartNode,
   send_message: SendMessageNode,
+  send_media: SendMediaNode,
   wait: WaitNode,
   condition: ConditionNode,
   webhook: WebhookNode,

@@ -1,4 +1,4 @@
-export type NodeType = 'start' | 'send_message' | 'wait' | 'condition' | 'webhook' | 'end';
+export type NodeType = 'start' | 'send_message' | 'send_media' | 'wait' | 'condition' | 'webhook' | 'end';
 
 export interface FlowNode {
   id: string;
@@ -9,10 +9,13 @@ export interface FlowNode {
 
 export interface NodeData {
   label?: string;
-  // send_message
+  // send_message / send_media
   message?: string;
   instanceId?: string;
   contactListId?: string;
+  // send_media
+  mediaUrl?: string;
+  mediaCaption?: string;
   // wait
   delay?: number;
   delayUnit?: 'seconds' | 'minutes' | 'hours';
