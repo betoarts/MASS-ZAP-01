@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -21,6 +22,7 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
   const { user } = useSession();
   const [instances, setInstances] = React.useState<Instance[]>([]);
   const [contactLists, setContactLists] = React.useState<ContactList[]>([]);
+  
 
   React.useEffect(() => {
     if (user) {
@@ -62,22 +64,18 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
   const renderContactListSelect = (field: string) => (
     <div>
       <Label>Usar Lista de Contatos (Opcional)</Label>
-      <Select
-        value={getSelectValue(selectedNode.data[field])}
-        onValueChange={(value) => handleSelectChange(field, value)}
+      <select
+        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-1"
+        value={selectedNode.data[field] ?? ''}
+        onChange={(e) => handleSelectChange(field, e.target.value || 'none')}
       >
-        <SelectTrigger className="mt-1">
-          <SelectValue placeholder="Nenhuma (usar contexto)" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">Nenhuma (usar contexto)</SelectItem>
-          {contactLists.map((list) => (
-            <SelectItem key={list.id} value={list.id}>
-              {list.name} ({list.contacts.length} contatos)
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <option value="">Nenhuma (usar contexto)</option>
+        {contactLists.map((list) => (
+          <option key={list.id} value={list.id}>
+            {list.name} ({list.contacts.length} contatos)
+          </option>
+        ))}
+      </select>
       <p className="text-xs text-gray-500 mt-1">
         Se selecionado, enviará para todos os contatos da lista
       </p>
@@ -87,28 +85,24 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
   const renderInstanceSelect = (field: string) => (
     <div>
       <Label>Instância WhatsApp</Label>
-      <Select
-        value={getSelectValue(selectedNode.data[field])}
-        onValueChange={(value) => handleSelectChange(field, value)}
+      <select
+        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-1"
+        value={selectedNode.data[field] ?? ''}
+        onChange={(e) => handleSelectChange(field, e.target.value || 'none')}
       >
-        <SelectTrigger className="mt-1">
-          <SelectValue placeholder="Selecione uma instância" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">Nenhuma</SelectItem>
-          {instances.length === 0 ? (
-            <SelectItem value="no-instance" disabled>
-              Nenhuma instância disponível
-            </SelectItem>
-          ) : (
-            instances.map((instance) => (
-              <SelectItem key={instance.id} value={instance.id!}>
-                {instance.name} ({instance.instanceName})
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
+        <option value="">Nenhuma</option>
+        {instances.length === 0 ? (
+          <option value="no-instance" disabled>
+            Nenhuma instância disponível
+          </option>
+        ) : (
+          instances.map((instance) => (
+            <option key={instance.id} value={instance.id!}>
+              {instance.name} ({instance.instanceName})
+            </option>
+          ))
+        )}
+      </select>
       <p className="text-xs text-gray-500 mt-1">
         Instância que enviará a mensagem
       </p>
@@ -194,29 +188,33 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
             <>
               <div>
                 <Label>Tempo de Espera</Label>
+                <Slider
+                  value={[selectedNode.data.delay || 30]}
+                  min={1}
+                  max={selectedNode.data.delayUnit === 'hours' ? 24 : selectedNode.data.delayUnit === 'minutes' ? 120 : 3600}
+                  step={1}
+                  onValueChange={(val) => handleChange('delay', val[0])}
+                  className="mt-2"
+                />
                 <Input
                   type="number"
                   value={selectedNode.data.delay || 30}
                   onChange={(e) => handleChange('delay', parseInt(e.target.value))}
-                  className="mt-1"
+                  className="mt-2"
                   min={1}
                 />
               </div>
               <div>
                 <Label>Unidade</Label>
-                <Select
+                <select
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-1"
                   value={selectedNode.data.delayUnit || 'seconds'}
-                  onValueChange={(value) => handleChange('delayUnit', value)}
+                  onChange={(e) => handleChange('delayUnit', e.target.value)}
                 >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="seconds">Segundos</SelectItem>
-                    <SelectItem value="minutes">Minutos</SelectItem>
-                    <SelectItem value="hours">Horas</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="seconds">Segundos</option>
+                  <option value="minutes">Minutos</option>
+                  <option value="hours">Horas</option>
+                </select>
               </div>
             </>
           )}

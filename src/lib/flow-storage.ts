@@ -56,15 +56,21 @@ export const createFlow = async (
 export const updateFlow = async (
   flowId: string,
   nodes: FlowNode[],
-  edges: FlowEdge[]
+  edges: FlowEdge[],
+  name?: string,
+  description?: string
 ): Promise<boolean> => {
+  const payload: any = {
+    nodes,
+    edges,
+    updated_at: new Date().toISOString(),
+  };
+  if (typeof name !== 'undefined') payload.name = name;
+  if (typeof description !== 'undefined') payload.description = description;
+
   const { error } = await supabase
     .from('flows')
-    .update({
-      nodes,
-      edges,
-      updated_at: new Date().toISOString(),
-    })
+    .update(payload)
     .eq('id', flowId);
 
   if (error) {

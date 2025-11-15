@@ -4,6 +4,8 @@ import ReactFlow, {
   Controls,
   MiniMap,
   addEdge,
+  applyNodeChanges,
+  applyEdgeChanges,
   useNodesState,
   useEdgesState,
   Connection,
@@ -50,6 +52,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes as Node[]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges as Edge[]);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -144,13 +147,39 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [nodes, onNodesDelete, setNodes, onNodesChange]);
 
-  React.useEffect(() => {
-    onNodesChange(nodes as FlowNode[]);
-  }, [nodes]);
+  const handleNodesChange = useCallback(
+    (changes: any) => {
+      setNodes((nds) => {
+        const next = applyNodeChanges(changes, nds);
+        onNodesChange(next as FlowNode[]);
+        return next;
+      });
+    },
+    [onNodesChange]
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: any) => {
+      setEdges((eds) => {
+        const next = applyEdgeChanges(changes, eds);
+        onEdgesChange(next as FlowEdge[]);
+        return next;
+      });
+    },
+    [onEdgesChange]
+  );
 
   React.useEffect(() => {
-    onEdgesChange(edges as FlowEdge[]);
-  }, [edges]);
+    if (!isDragging) {
+      setNodes(initialNodes as Node[]);
+    }
+  }, [initialNodes, isDragging]);
+
+  React.useEffect(() => {
+    if (!isDragging) {
+      setEdges(initialEdges as Edge[]);
+    }
+  }, [initialEdges, isDragging]);
 
   return (
     <div ref={reactFlowWrapper} className="flex-1 h-full">

@@ -42,7 +42,7 @@ const FlowBuilder: React.FC = () => {
   const handleSave = async () => {
     if (!flowId) return;
     setIsSaving(true);
-    const success = await updateFlow(flowId, nodes, edges);
+    const success = await updateFlow(flowId, nodes, edges, flowName);
     if (success) {
       toast.success('Fluxo salvo com sucesso!');
     } else {
@@ -52,11 +52,8 @@ const FlowBuilder: React.FC = () => {
   };
 
   const handleUpdateNode = useCallback((nodeId: string, newData: any) => {
-    setNodes((nds) =>
-      nds.map((node) =>
-        node.id === nodeId ? { ...node, data: newData } : node
-      )
-    );
+    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: newData } : node)));
+    setSelectedNode((sel) => (sel && sel.id === nodeId ? { ...sel, data: newData } : sel));
   }, []);
 
   const handleDeleteNode = useCallback((nodeId: string) => {
@@ -73,6 +70,13 @@ const FlowBuilder: React.FC = () => {
     const hasStart = nodes.some(n => n.type === 'start');
     if (!hasStart) {
       toast.error('O fluxo precisa ter um bloco de Início!');
+      return;
+    }
+
+    // Garantir que o backend tenha os nodes/edges atualizados
+    const saved = await updateFlow(flowId, nodes, edges, flowName);
+    if (!saved) {
+      toast.error('Erro ao salvar fluxo antes de executar.');
       return;
     }
 

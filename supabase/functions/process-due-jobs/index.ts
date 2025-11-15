@@ -56,27 +56,26 @@ serve(async (req) => {
         const context = execution.context || {};
 
         if (job.node_type === 'send_message') {
-          await processSendMessage(job, context, supabase);
+          await processSendMessage(job, execution, context, supabase);
+          await scheduleNextNodes(job, execution, supabase); // Agendar próximo nó após sucesso
         } else if (job.node_type === 'send_media') {
-          await processSendMedia(job, context, supabase);
+          await processSendMedia(job, execution, context, supabase);
+          await scheduleNextNodes(job, execution, supabase); // Agendar próximo nó após sucesso
         } else if (job.node_type === 'wait') {
-          await processWait(job, execution, supabase);
+          await processWait(job, execution, supabase); // Já agenda o próximo nó internamente
         } else if (job.node_type === 'condition') {
-          await processCondition(job, execution, context, supabase);
+          await processCondition(job, execution, context, supabase); // Já agenda o próximo nó internamente
         } else if (job.node_type === 'webhook') {
-          await processWebhook(job, context, supabase);
+          await processWebhook(job, execution, context, supabase);
+          await scheduleNextNodes(job, execution, supabase); // Agendar próximo nó após sucesso
         } else if (job.node_type === 'end') {
-          await processEnd(job, execution, supabase);
+          await processEnd(job, execution, supabase); // Já finaliza a execução
         }
 
         await supabase
           .from('jobs')
           .update({ status: 'completed', processed_at: new Date().toISOString() })
           .eq('id', job.id);
-
-        if (job.node_type !== 'wait' && job.node_type !== 'end' && job.node_type !== 'condition') {
-          await scheduleNextNodes(job, execution, supabase);
-        }
 
       } catch (error: any) {
         console.error('Erro processando job:', error);
@@ -208,7 +207,7 @@ async function fetchInstanceAndContacts(job: any, userId: string, supabase: any)
   return { instance, contacts };
 }
 
-async function processSendMessage(job: any, context: any, supabase: any) {
+async function processSendMessage(job: any, execution: any, context: any, supabase: any) {
   const { instance, contacts } = await fetchInstanceAndContacts(job, job.user_id, supabase);
   
   const messagesToSend = getMessageContexts(
@@ -234,7 +233,7 @@ async function processSendMessage(job: any, context: any, supabase: any) {
   }
 }
 
-async function processSendMedia(job: any, context: any, supabase: any) {
+async function processSendMedia(job: any, execution: any, context: any, supabase: any) {
   const { instance, contacts } = await fetchInstanceAndContacts(job, job.user_id, supabase);
   
   const messagesToSend = getMessageContexts(
@@ -400,7 +399,7 @@ async function processCondition(job: any, execution: any, context: any, supabase
   }
 }
 
-async function processWebhook(job: any, context: any, supabase: any) {
+async function processWebhook(job: any, execution: any, context: any, supabase: any) {
   const url = job.node_data.url || '';
   const method = job.node_data.method || 'POST';
   let body = job.node_data.body || '';

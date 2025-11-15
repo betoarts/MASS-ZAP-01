@@ -61,9 +61,10 @@ export const getAllCampaignLogs = async (): Promise<CampaignLog[]> => {
 export const getMessageSentCount = async (): Promise<number> => {
   const { count, error } = await supabase
     .from("campaign_logs")
-    .select("id", { count: "exact", head: true })
+    .select("id", { count: "exact" })
     .eq("event_type", "message_sent")
-    .not("campaign_id", "is", null); // garante que é de campanha, não propostas
+    .not("campaign_id", "is", null)
+    .limit(1);
 
   if (error) {
     console.error("Error counting sent messages:", error);
