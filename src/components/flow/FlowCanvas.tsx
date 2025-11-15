@@ -11,7 +11,6 @@ import ReactFlow, {
   Connection,
   Node,
   Edge,
-  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { StartNode } from './nodes/StartNode';
@@ -105,7 +104,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
     onNodeSelect(null);
   }, [onNodeSelect]);
 
-  // Função para deletar nodes selecionados
+  // A função onNodesDelete é mantida, mas só será chamada se for explicitamente acionada (o que não acontece por padrão sem deleteKeyCode)
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
       const deletedIds = deleted.map(n => n.id);
@@ -126,26 +125,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
     [edges, setEdges, onEdgesChange, onNodeSelect]
   );
 
-  // Listener para teclas Delete/Backspace
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        const selectedNodes = nodes.filter((node: any) => node.selected);
-        if (selectedNodes.length > 0) {
-          event.preventDefault();
-          onNodesDelete(selectedNodes);
-          
-          // Remover os nodes selecionados
-          const updatedNodes = nodes.filter((node: any) => !node.selected);
-          setNodes(updatedNodes);
-          onNodesChange(updatedNodes as FlowNode[]);
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, onNodesDelete, setNodes, onNodesChange]);
+  // Removido: Listener para teclas Delete/Backspace
 
   const handleNodesChange = useCallback(
     (changes: any) => {
@@ -186,8 +166,8 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChangeInternal}
-        onEdgesChange={onEdgesChangeInternal}
+        onNodesChange={handleNodesChange} // Usando handleNodesChange para garantir que o estado externo seja atualizado
+        onEdgesChange={handleEdgesChange} // Usando handleEdgesChange para garantir que o estado externo seja atualizado
         onConnect={onConnect}
         onInit={setReactFlowInstance}
         onDrop={onDrop}
@@ -197,7 +177,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
         onNodesDelete={onNodesDelete}
         nodeTypes={nodeTypes}
         fitView
-        deleteKeyCode={['Delete', 'Backspace']}
+        // Removido: deleteKeyCode={['Delete', 'Backspace']}
       >
         <Background />
         <Controls />
