@@ -70,10 +70,10 @@ export const FlowJobTable: React.FC<FlowJobTableProps> = ({ jobs, isLoading }) =
                 <TableCell>{job.node_type}</TableCell>
                 <TableCell>{getStatusBadge(job.status)}</TableCell>
                 <TableCell>
-                  {format(new Date(job.scheduled_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
+                  {format(new Date(job.scheduled_at), "dd-MM-yyyy HH:mm", { locale: ptBR })}
                 </TableCell>
                 <TableCell>
-                  {job.processed_at ? format(new Date(job.processed_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR }) : "-"}
+                  {job.processed_at ? format(new Date(job.processed_at), "dd-MM-yyyy HH:mm", { locale: ptBR }) : "-"}
                 </TableCell>
                 <TableCell>{job.retry_count} / {job.max_retries}</TableCell>
                 <TableCell className="text-right">

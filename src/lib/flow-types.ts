@@ -32,6 +32,7 @@ export interface NodeData {
   trueLabel?: string;
   falseLabel?: string;
   // webhook
+  webhookSourceId?: string;
   url?: string;
   method?: 'GET' | 'POST';
   headers?: Record<string, string>;

@@ -7,7 +7,7 @@ import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
-import { FlowNode } from '@/lib/flow-types';
+import { FlowNode, NodeData } from '@/lib/flow-types';
 import { Instance, getInstances } from '@/lib/storage';
 import { ContactList, getContactLists } from '@/lib/contact-storage';
 import { Switch } from '@/components/ui/switch';
@@ -67,7 +67,7 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
     );
   }
 
-  const handleChange = (field: string, value: any) => {
+  const handleChange = (field: keyof NodeData, value: any) => {
     onUpdateNode(selectedNode.id, { ...selectedNode.data, [field]: value });
   };
 
@@ -78,23 +78,20 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
   };
 
   // Função auxiliar para mapear valor do Select para o estado do nó
-  const handleSelectChange = (field: string, value: string) => {
+  const handleSelectChange = (field: keyof NodeData, value: string) => {
     // Se o valor for 'none' (nosso placeholder para vazio), definimos como undefined
     const finalValue = value === 'none' ? undefined : value;
     handleChange(field, finalValue);
   };
 
-  // Função auxiliar para obter o valor do Select, usando 'none' se for undefined/null
-  const getSelectValue = (value: string | undefined | null) => {
-    return value || 'none';
-  };
+  
 
-  const renderContactListSelect = (field: string) => (
+  const renderContactListSelect = (field: keyof NodeData) => (
     <div>
       <Label>Usar Lista de Contatos (Opcional)</Label>
       <select
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-1"
-        value={selectedNode.data[field] ?? ''}
+        value={(selectedNode.data[field] as string | undefined) ?? ''}
         onChange={(e) => handleSelectChange(field, e.target.value || 'none')}
       >
         <option value="">Nenhuma (usar contexto)</option>
@@ -110,12 +107,12 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
     </div>
   );
 
-  const renderInstanceSelect = (field: string) => (
+  const renderInstanceSelect = (field: keyof NodeData) => (
     <div>
       <Label>Instância WhatsApp</Label>
       <select
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-1"
-        value={selectedNode.data[field] ?? ''}
+        value={(selectedNode.data[field] as string | undefined) ?? ''}
         onChange={(e) => handleSelectChange(field, e.target.value || 'none')}
       >
         <option value="">Nenhuma</option>
@@ -291,32 +288,9 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
                 </select>
                 <p className="text-xs text-gray-500 mt-1">Selecione uma fonte criada em Webhooks para integração automática</p>
               </div>
+              
               <div>
-                <Label>URL</Label>
-                <Input
-                  value={selectedNode.data.url || ''}
-                  onChange={(e) => handleChange('url', e.target.value)}
-                  placeholder="https://api.exemplo.com/webhook"
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>Método</Label>
-                <Select
-                  value={selectedNode.data.method || 'POST'}
-                  onValueChange={(value) => handleChange('method', value)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GET">GET</SelectItem>
-                    <SelectItem value="POST">POST</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Body (JSON)</Label>
+                <Label>Payload (JSON)</Label>
                 <Textarea
                   value={selectedNode.data.body || ''}
                   onChange={(e) => handleChange('body', e.target.value)}

@@ -80,6 +80,8 @@ export const HeaderBar: React.FC = () => {
           "message_sent",
           "message_failed",
           "message_error",
+          "campaign_created",
+          "campaign_scheduled",
           "campaign_started",
           "campaign_completed",
           "campaign_failed",
@@ -93,6 +95,8 @@ export const HeaderBar: React.FC = () => {
         setNotifications((prev) => [item, ...prev].slice(0, 50));
         setUnread((u) => u + 1);
         const titles: Record<string, string> = {
+          campaign_created: "Campanha criada",
+          campaign_scheduled: "Campanha agendada",
           webhook_received: "Webhook recebido",
           webhook_error: "Erro de webhook",
           webhook_auth_error: "Erro de autenticação do webhook",

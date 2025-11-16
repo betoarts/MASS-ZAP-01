@@ -1,5 +1,7 @@
 // @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+// Tipos para ambiente Deno quando verificados pelo TypeScript no build da aplicação
+declare const Deno: { env: { get: (name: string) => string | undefined } };
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 // @ts-ignore
@@ -15,7 +17,7 @@ const logDebug = (message: string, details?: any) => {
     console.log(`[DEBUG] ${message}`, details ? JSON.stringify(details) : '');
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -453,16 +455,25 @@ async function processWebhook(job: any, execution: any, context: any, supabase: 
     if (!source || !source.target_list_id) {
       throw new Error('Fonte de webhook inválida ou sem lista alvo configurada');
     }
-    const baseUrl = (typeof Deno !== 'undefined' && Deno.env.get('SUPABASE_URL')) || '';
-    const apiKeyParam = encodeURIComponent((source.api_key ?? '').trim());
-    const urlParams = new URLSearchParams({
-      source: job.user_id,
-      source_id: source.id,
-      list_id: source.target_list_id,
+    let payload: Record<string, any> = {};
+    try {
+      payload = body ? JSON.parse(body) : {};
+    } catch (_) {
+      payload = { raw: body };
+    }
+    const { error: invokeError } = await supabase.functions.invoke('webhook-universal-v2', {
+      body: {
+        source_user_id: job.user_id,
+        source_id: source.id,
+        list_id: source.target_list_id,
+        api_key: (source.api_key ?? '').trim(),
+        payload,
+      },
     });
-    if (apiKeyParam) urlParams.set('api_key', apiKeyParam);
-    url = `${baseUrl}/functions/v1/webhook-universal-v2?${urlParams.toString()}`;
-    method = 'POST';
+    if (invokeError) {
+      throw new Error(`Falha no nó webhook: ${invokeError.message}`);
+    }
+    return;
   }
   
   // Substituir variáveis no body
@@ -489,6 +500,13 @@ async function processCreateCampaign(job: any, execution: any, supabase: any) {
   const now = new Date();
   const scheduledAtStr = job.node_data.scheduledAt || null;
   const scheduledAtDate = scheduledAtStr ? new Date(scheduledAtStr) : null;
+
+  if (!job.node_data.instanceId) {
+    throw new Error('Instância não configurada no bloco Criar Campanha');
+  }
+  if (!job.node_data.contactListId) {
+    throw new Error('Lista de contatos não configurada no bloco Criar Campanha');
+  }
   const { data: inserted, error } = await supabase
     .from('campaigns')
     .insert({
@@ -510,7 +528,29 @@ async function processCreateCampaign(job: any, execution: any, supabase: any) {
     .single();
 
   if (error || !inserted) {
-    throw new Error('Falha ao criar campanha');
+    throw new Error(`Falha ao criar campanha: ${error?.message || 'erro desconhecido'}`);
+  }
+
+  // Log de criação e agendamento
+  await supabase
+    .from('campaign_logs')
+    .insert({
+      user_id: job.user_id,
+      campaign_id: inserted.id,
+      event_type: 'campaign_created',
+      message: `Campanha "${inserted.name}" criada via FlowZapp`,
+      metadata: { node_id: job.node_id, execution_id: job.execution_id },
+    });
+  if (scheduledAtDate && scheduledAtDate.getTime() > now.getTime()) {
+    await supabase
+      .from('campaign_logs')
+      .insert({
+        user_id: job.user_id,
+        campaign_id: inserted.id,
+        event_type: 'campaign_scheduled',
+        message: `Campanha agendada para ${scheduledAtStr}`,
+        metadata: { node_id: job.node_id, execution_id: job.execution_id },
+      });
   }
 
   if (!scheduledAtDate || scheduledAtDate.getTime() <= now.getTime()) {

@@ -17,6 +17,7 @@ const FlowExecutions: React.FC = () => {
   const [flow, setFlow] = React.useState<Flow | null>(null);
   const [executions, setExecutions] = React.useState<Execution[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isProcessing, setIsProcessing] = React.useState(false);
 
   const fetchExecutions = React.useCallback(async () => {
     if (!flowId) return;
@@ -36,19 +37,45 @@ const FlowExecutions: React.FC = () => {
   }, [flowId, navigate]);
 
   const processNow = React.useCallback(async () => {
-    let total = 0;
-    for (let i = 0; i < 5; i++) {
-      const res = await supabase.functions.invoke("process-due-jobs");
-      const processed = (res.data && (res.data.processed ?? 0)) || 0;
-      if (processed > 0) {
-        total += processed;
-        await new Promise((r) => setTimeout(r, 300));
-      } else {
+    setIsProcessing(true);
+    try {
+      let total = 0;
+      for (let i = 0; i < 5; i++) {
+        try {
+          const res = await supabase.functions.invoke("process-due-jobs");
+          const processed = (res.data && (res.data.processed ?? 0)) || 0;
+          if (processed > 0) {
+            total += processed;
+            await new Promise((r) => setTimeout(r, 300));
+            continue;
+          }
+        } catch (_) {}
+        try {
+          const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-due-jobs`;
+          const resp = await fetch(url, {
+            method: "POST",
+            headers: {
+              apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+              "Content-Type": "application/json",
+            },
+          });
+          const json = await resp.json().catch(() => ({}));
+          const processed = (json && (json.processed ?? 0)) || 0;
+          if (processed > 0) {
+            total += processed;
+            await new Promise((r) => setTimeout(r, 300));
+            continue;
+          }
+        } catch (_) {}
         break;
       }
+      toast.success(total > 0 ? `Processados: ${total} job(s)` : "Nenhum job para processar");
+      fetchExecutions();
+    } catch (err: any) {
+      toast.error("Falha ao processar agora", { description: err?.message });
+    } finally {
+      setIsProcessing(false);
     }
-    toast.success(total > 0 ? `Processados: ${total} job(s)` : "Nenhum job para processar");
-    fetchExecutions();
   }, [fetchExecutions]);
 
   React.useEffect(() => {
@@ -78,8 +105,12 @@ const FlowExecutions: React.FC = () => {
               <RefreshCw className={isLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
               {isLoading ? "Atualizando..." : "Atualizar"}
             </Button>
-            <Button onClick={processNow}>
-              Processar Agora
+            <Button onClick={processNow} disabled={isProcessing}>
+              {isProcessing ? (
+                <span className="inline-flex items-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" />Processando…</span>
+              ) : (
+                "Processar Agora"
+              )}
             </Button>
           </div>
         }
