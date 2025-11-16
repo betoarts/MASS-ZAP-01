@@ -1,4 +1,4 @@
-# Bright Parrot Skid
+# MassZapp
 
 Este é um aplicativo web para gerenciar campanhas de WhatsApp. Ele permite configurar instâncias do WhatsApp, gerenciar listas de contatos, criar e enviar campanhas, e acompanhar seus resultados.
 
