@@ -18,6 +18,7 @@ import { WaitNode } from './nodes/WaitNode';
 import { ConditionNode } from './nodes/ConditionNode';
 import { WebhookNode } from './nodes/WebhookNode';
 import { EndNode } from './nodes/EndNode';
+import { CreateCampaignNode } from './nodes/CreateCampaignNode';
 import { FlowNode, FlowEdge } from '@/lib/flow-types';
 
 const nodeTypes = {
@@ -27,6 +28,7 @@ const nodeTypes = {
   wait: WaitNode,
   condition: ConditionNode,
   webhook: WebhookNode,
+  create_campaign: CreateCampaignNode,
   end: EndNode,
 };
 

@@ -107,6 +107,20 @@ const FlowBuilder: React.FC = () => {
           description: `Execution ID: ${data.executionId}`,
           id: loadingToast 
         });
+        let totalProcessed = 0;
+        for (let i = 0; i < 5; i++) {
+          const res = await supabase.functions.invoke('process-due-jobs');
+          const processed = (res.data && (res.data.processed ?? 0)) || 0;
+          if (processed > 0) {
+            totalProcessed += processed;
+            await new Promise((r) => setTimeout(r, 300));
+          } else {
+            break;
+          }
+        }
+        if (totalProcessed > 0) {
+          toast.success(`Processados agora: ${totalProcessed} job(s)`);
+        }
       }
     } catch (err: any) {
       toast.error('Erro inesperado', { 

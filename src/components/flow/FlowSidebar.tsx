@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, MessageCircle, Clock, GitBranch, Webhook, Square, Image } from 'lucide-react';
+import { Play, MessageCircle, Clock, GitBranch, Webhook, Square, Image, Send } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 const nodeTypes = [
@@ -9,6 +9,7 @@ const nodeTypes = [
   { type: 'wait', label: 'Aguardar', icon: Clock, color: 'bg-yellow-100 border-yellow-400 text-yellow-700' },
   { type: 'condition', label: 'Condição', icon: GitBranch, color: 'bg-purple-100 border-purple-400 text-purple-700' },
   { type: 'webhook', label: 'Webhook', icon: Webhook, color: 'bg-orange-100 border-orange-400 text-orange-700' },
+  { type: 'create_campaign', label: 'Criar Campanha', icon: Send, color: 'bg-teal-100 border-teal-400 text-teal-700' },
   { type: 'end', label: 'Fim', icon: Square, color: 'bg-red-100 border-red-400 text-red-700' },
 ];
 

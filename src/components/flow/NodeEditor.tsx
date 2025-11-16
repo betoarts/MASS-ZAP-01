@@ -10,6 +10,8 @@ import { Trash2 } from 'lucide-react';
 import { FlowNode } from '@/lib/flow-types';
 import { Instance, getInstances } from '@/lib/storage';
 import { ContactList, getContactLists } from '@/lib/contact-storage';
+import { Switch } from '@/components/ui/switch';
+import { WebhookSource, getWebhookSources } from '@/lib/webhook-storage';
 import { useSession } from '@/components/auth/SessionContextProvider';
 
 interface NodeEditorProps {
@@ -22,14 +24,40 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
   const { user } = useSession();
   const [instances, setInstances] = React.useState<Instance[]>([]);
   const [contactLists, setContactLists] = React.useState<ContactList[]>([]);
+  const [webhookSources, setWebhookSources] = React.useState<WebhookSource[]>([]);
+  const [campaignDate, setCampaignDate] = React.useState<string>('');
+  const [campaignTime, setCampaignTime] = React.useState<string>('');
   
 
   React.useEffect(() => {
     if (user) {
       getInstances(user.id).then(setInstances);
       getContactLists().then(setContactLists);
+      getWebhookSources(user.id).then(setWebhookSources);
     }
   }, [user]);
+
+  React.useEffect(() => {
+    if (!selectedNode || selectedNode.type !== 'create_campaign') {
+      setCampaignDate('');
+      setCampaignTime('');
+      return;
+    }
+    const sa = selectedNode.data.scheduledAt;
+    if (!sa) {
+      setCampaignDate('');
+      setCampaignTime('');
+      return;
+    }
+    const d = new Date(sa);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(d.getFullYear());
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    setCampaignDate(`${dd}-${mm}-${yyyy}`);
+    setCampaignTime(`${hh}:${mi}`);
+  }, [selectedNode?.id, selectedNode?.type, selectedNode?.data?.scheduledAt]);
 
   if (!selectedNode) {
     return (
@@ -250,6 +278,20 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
           {selectedNode.type === 'webhook' && (
             <>
               <div>
+                <Label>Fonte de Webhook (da aplicação)</Label>
+                <select
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-1"
+                  value={selectedNode.data.webhookSourceId ?? ''}
+                  onChange={(e) => handleChange('webhookSourceId', e.target.value || undefined)}
+                >
+                  <option value="">Nenhuma</option>
+                  {webhookSources.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.source_type})</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Selecione uma fonte criada em Webhooks para integração automática</p>
+              </div>
+              <div>
                 <Label>URL</Label>
                 <Input
                   value={selectedNode.data.url || ''}
@@ -285,6 +327,148 @@ export const NodeEditor: React.FC<NodeEditorProps> = ({ selectedNode, onUpdateNo
                 <p className="text-xs text-gray-500 mt-1">
                   Suporta variáveis do contexto
                 </p>
+              </div>
+            </>
+          )}
+
+          {/* CREATE CAMPAIGN NODE */}
+          {selectedNode.type === 'create_campaign' && (
+            <>
+              <div>
+                <Label>Nome da Campanha</Label>
+                <Input
+                  value={selectedNode.data.campaignName || ''}
+                  onChange={(e) => handleChange('campaignName', e.target.value)}
+                  placeholder="Minha Campanha"
+                  className="mt-1"
+                />
+              </div>
+              {renderInstanceSelect('instanceId')}
+              {renderContactListSelect('contactListId')}
+              <div>
+                <Label>Mensagem</Label>
+                <Textarea
+                  value={selectedNode.data.messageText || ''}
+                  onChange={(e) => handleChange('messageText', e.target.value)}
+                  placeholder="Olá {{primeiro_nome}}..."
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>URL da Mídia (Opcional)</Label>
+                <Input
+                  value={selectedNode.data.mediaUrl || ''}
+                  onChange={(e) => handleChange('mediaUrl', e.target.value)}
+                  placeholder="https://exemplo.com/arquivo.jpg"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Legenda da Mídia (Opcional)</Label>
+                <Textarea
+                  value={selectedNode.data.mediaCaption || ''}
+                  onChange={(e) => handleChange('mediaCaption', e.target.value)}
+                  rows={2}
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={!!selectedNode.data.linkPreview}
+                    onCheckedChange={(v) => handleChange('linkPreview', v)}
+                  />
+                  <Label>Preview de Link</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={!!selectedNode.data.mentionsEveryOne}
+                    onCheckedChange={(v) => handleChange('mentionsEveryOne', v)}
+                  />
+                  <Label>Mencionar todos</Label>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Data (dd-mm-yyyy)</Label>
+                  <Input
+                    value={campaignDate}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                      let formatted = digits.slice(0, 2);
+                      if (digits.length > 2) formatted += '-' + digits.slice(2, 4);
+                      if (digits.length > 4) formatted += '-' + digits.slice(4, 8);
+                      setCampaignDate(formatted);
+                      if (digits.length === 8) {
+                        const dd = parseInt(digits.slice(0, 2));
+                        const mm = parseInt(digits.slice(2, 4));
+                        const yyyy = parseInt(digits.slice(4, 8));
+                        const timeDigits = campaignTime.replace(/\D/g, '').slice(0, 4);
+                        if (timeDigits.length === 4) {
+                          const hh = parseInt(timeDigits.slice(0, 2));
+                          const mi = parseInt(timeDigits.slice(2, 4));
+                          const iso = new Date(yyyy, mm - 1, dd, hh, mi).toISOString();
+                          handleChange('scheduledAt', iso);
+                        }
+                      }
+                    }}
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="dd-mm-yyyy"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Hora (HH:mm)</Label>
+                  <Input
+                    value={campaignTime}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      let hh = digits.slice(0, 2);
+                      let mi = digits.slice(2, 4);
+                      let hhNum = hh ? Math.min(Math.max(parseInt(hh), 0), 23) : NaN;
+                      let miNum = mi ? Math.min(Math.max(parseInt(mi), 0), 59) : NaN;
+                      let formatted = hh;
+                      if (digits.length > 2) formatted += ':' + mi;
+                      if (!isNaN(hhNum) && !isNaN(miNum) && digits.length === 4) {
+                        const hhStr = String(hhNum).padStart(2, '0');
+                        const miStr = String(miNum).padStart(2, '0');
+                        formatted = `${hhStr}:${miStr}`;
+                        const dateDigits = campaignDate.replace(/\D/g, '').slice(0, 8);
+                        if (dateDigits.length === 8) {
+                          const dd = parseInt(dateDigits.slice(0, 2));
+                          const mm = parseInt(dateDigits.slice(2, 4));
+                          const yyyy = parseInt(dateDigits.slice(4, 8));
+                          const iso = new Date(yyyy, mm - 1, dd, hhNum, miNum).toISOString();
+                          handleChange('scheduledAt', iso);
+                        }
+                      }
+                      setCampaignTime(formatted);
+                    }}
+                    inputMode="numeric"
+                    maxLength={5}
+                    placeholder="HH:mm"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Atraso Mín/Máx (segundos)</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <Input
+                      type="number"
+                      value={selectedNode.data.minDelay ?? 1}
+                      onChange={(e) => handleChange('minDelay', parseInt(e.target.value))}
+                      min={0}
+                    />
+                    <Input
+                      type="number"
+                      value={selectedNode.data.maxDelay ?? 2}
+                      onChange={(e) => handleChange('maxDelay', parseInt(e.target.value))}
+                      min={0}
+                    />
+                  </div>
+                </div>
               </div>
             </>
           )}

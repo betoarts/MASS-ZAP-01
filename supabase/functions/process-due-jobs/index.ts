@@ -87,6 +87,9 @@ serve(async (req) => {
         } else if (job.node_type === 'webhook') {
           await processWebhook(job, execution, context, supabase);
           await scheduleNextNodes(job, execution, supabase);
+        } else if (job.node_type === 'create_campaign') {
+          await processCreateCampaign(job, execution, supabase);
+          await scheduleNextNodes(job, execution, supabase);
         } else if (job.node_type === 'end') {
           await processEnd(job, execution, supabase);
         }
@@ -435,9 +438,32 @@ async function processCondition(job: any, execution: any, context: any, supabase
 }
 
 async function processWebhook(job: any, execution: any, context: any, supabase: any) {
-  const url = job.node_data.url || '';
-  const method = job.node_data.method || 'POST';
+  let url = job.node_data.url || '';
+  let method = job.node_data.method || 'POST';
   let body = job.node_data.body || '';
+  const webhookSourceId = job.node_data.webhookSourceId;
+  
+  if (!url && webhookSourceId) {
+    const { data: source } = await supabase
+      .from('webhook_sources')
+      .select('id, target_list_id, api_key')
+      .eq('id', webhookSourceId)
+      .eq('user_id', job.user_id)
+      .single();
+    if (!source || !source.target_list_id) {
+      throw new Error('Fonte de webhook inválida ou sem lista alvo configurada');
+    }
+    const baseUrl = (typeof Deno !== 'undefined' && Deno.env.get('SUPABASE_URL')) || '';
+    const apiKeyParam = encodeURIComponent((source.api_key ?? '').trim());
+    const urlParams = new URLSearchParams({
+      source: job.user_id,
+      source_id: source.id,
+      list_id: source.target_list_id,
+    });
+    if (apiKeyParam) urlParams.set('api_key', apiKeyParam);
+    url = `${baseUrl}/functions/v1/webhook-universal-v2?${urlParams.toString()}`;
+    method = 'POST';
+  }
   
   // Substituir variáveis no body
   for (const key in context) {
@@ -456,6 +482,44 @@ async function processWebhook(job: any, execution: any, context: any, supabase: 
 
   if (!response.ok) {
     throw new Error(`Webhook falhou: ${response.statusText}`);
+  }
+}
+
+async function processCreateCampaign(job: any, execution: any, supabase: any) {
+  const now = new Date();
+  const scheduledAtStr = job.node_data.scheduledAt || null;
+  const scheduledAtDate = scheduledAtStr ? new Date(scheduledAtStr) : null;
+  const { data: inserted, error } = await supabase
+    .from('campaigns')
+    .insert({
+      user_id: job.user_id,
+      name: job.node_data.campaignName || 'Campanha do Fluxo',
+      instance_id: job.node_data.instanceId,
+      contact_list_id: job.node_data.contactListId,
+      message_text: job.node_data.messageText || job.node_data.message || '',
+      media_url: job.node_data.mediaUrl || null,
+      media_caption: job.node_data.mediaCaption || null,
+      link_preview: !!job.node_data.linkPreview,
+      mentions_every_one: !!job.node_data.mentionsEveryOne,
+      scheduled_at: scheduledAtStr,
+      min_delay: job.node_data.minDelay ?? 1,
+      max_delay: job.node_data.maxDelay ?? 2,
+      status: scheduledAtDate && scheduledAtDate.getTime() > now.getTime() ? 'scheduled' : 'running',
+    })
+    .select()
+    .single();
+
+  if (error || !inserted) {
+    throw new Error('Falha ao criar campanha');
+  }
+
+  if (!scheduledAtDate || scheduledAtDate.getTime() <= now.getTime()) {
+    const { error: invokeError } = await supabase.functions.invoke('send-campaign', {
+      body: { campaignId: inserted.id, userId: job.user_id },
+    });
+    if (invokeError) {
+      throw new Error(`Erro ao iniciar campanha automaticamente: ${invokeError.message}`);
+    }
   }
 }
 

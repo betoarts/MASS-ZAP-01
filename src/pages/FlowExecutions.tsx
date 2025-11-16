@@ -9,6 +9,7 @@ import { Flow, Execution } from "@/lib/flow-types";
 import { toast } from "sonner";
 import { FlowExecutionTable } from "@/components/flow/FlowExecutionTable";
 import PageHeader from "@/components/layout/PageHeader";
+import { supabase } from "@/integrations/supabase/client";
 
 const FlowExecutions: React.FC = () => {
   const { flowId } = useParams<{ flowId: string }>();
@@ -33,6 +34,22 @@ const FlowExecutions: React.FC = () => {
     setExecutions(fetchedExecutions);
     setIsLoading(false);
   }, [flowId, navigate]);
+
+  const processNow = React.useCallback(async () => {
+    let total = 0;
+    for (let i = 0; i < 5; i++) {
+      const res = await supabase.functions.invoke("process-due-jobs");
+      const processed = (res.data && (res.data.processed ?? 0)) || 0;
+      if (processed > 0) {
+        total += processed;
+        await new Promise((r) => setTimeout(r, 300));
+      } else {
+        break;
+      }
+    }
+    toast.success(total > 0 ? `Processados: ${total} job(s)` : "Nenhum job para processar");
+    fetchExecutions();
+  }, [fetchExecutions]);
 
   React.useEffect(() => {
     fetchExecutions();
@@ -60,6 +77,9 @@ const FlowExecutions: React.FC = () => {
             <Button onClick={fetchExecutions} disabled={isLoading}>
               <RefreshCw className={isLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
               {isLoading ? "Atualizando..." : "Atualizar"}
+            </Button>
+            <Button onClick={processNow}>
+              Processar Agora
             </Button>
           </div>
         }

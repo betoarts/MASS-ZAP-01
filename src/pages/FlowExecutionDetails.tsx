@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { supabase } from "@/integrations/supabase/client";
 
 const FlowExecutionDetails: React.FC = () => {
   const { flowId, executionId } = useParams<{ flowId: string, executionId: string }>();
@@ -38,6 +39,22 @@ const FlowExecutionDetails: React.FC = () => {
     setJobs(fetchedJobs);
     setIsLoading(false);
   }, [executionId, flowId, navigate]);
+
+  const processNow = React.useCallback(async () => {
+    let total = 0;
+    for (let i = 0; i < 5; i++) {
+      const res = await supabase.functions.invoke("process-due-jobs");
+      const processed = (res.data && (res.data.processed ?? 0)) || 0;
+      if (processed > 0) {
+        total += processed;
+        await new Promise((r) => setTimeout(r, 300));
+      } else {
+        break;
+      }
+    }
+    toast.success(total > 0 ? `Processados: ${total} job(s)` : "Nenhum job para processar");
+    fetchDetails();
+  }, [fetchDetails]);
 
   React.useEffect(() => {
     fetchDetails();
@@ -91,6 +108,9 @@ const FlowExecutionDetails: React.FC = () => {
             <Button onClick={fetchDetails} disabled={isLoading}>
               <RefreshCw className={isLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
               {isLoading ? "Atualizando..." : "Atualizar"}
+            </Button>
+            <Button onClick={processNow}>
+              Processar Agora
             </Button>
           </div>
         }

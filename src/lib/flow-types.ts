@@ -1,4 +1,4 @@
-export type NodeType = 'start' | 'send_message' | 'send_media' | 'wait' | 'condition' | 'webhook' | 'end';
+export type NodeType = 'start' | 'send_message' | 'send_media' | 'wait' | 'condition' | 'webhook' | 'create_campaign' | 'end';
 
 export interface FlowNode {
   id: string;
@@ -16,6 +16,14 @@ export interface NodeData {
   // send_media
   mediaUrl?: string;
   mediaCaption?: string;
+  // create_campaign
+  campaignName?: string;
+  messageText?: string;
+  linkPreview?: boolean;
+  mentionsEveryOne?: boolean;
+  scheduledAt?: string;
+  minDelay?: number;
+  maxDelay?: number;
   // wait
   delay?: number;
   delayUnit?: 'seconds' | 'minutes' | 'hours';
