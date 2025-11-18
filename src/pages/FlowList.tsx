@@ -8,6 +8,7 @@ import { getFlows, createFlow, deleteFlow } from '@/lib/flow-storage';
 import { useSession } from '@/components/auth/SessionContextProvider';
 import { toast } from 'sonner';
 import PageHeader from '@/components/layout/PageHeader';
+import { RequireSubscription } from '@/components/auth/RequireSubscription';
 
 const FlowList: React.FC = () => {
   const navigate = useNavigate();
@@ -50,6 +51,7 @@ const FlowList: React.FC = () => {
   };
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <PageHeader
         title="Meus Fluxos"
@@ -108,6 +110,7 @@ const FlowList: React.FC = () => {
         </div>
       )}
     </div>
+    </RequireSubscription>
   );
 };
 

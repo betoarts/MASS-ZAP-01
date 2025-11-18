@@ -17,6 +17,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const Logs = () => {
   const navigate = useNavigate();
@@ -110,6 +111,7 @@ const Logs = () => {
   };
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Logs do Sistema</h1>
@@ -178,6 +180,7 @@ const Logs = () => {
         )}
       </div>
     </div>
+    </RequireSubscription>
   );
 };
 

@@ -18,6 +18,7 @@ import {
 import { WebhookSourceForm } from "@/components/webhook/WebhookSourceForm";
 import { WebhookSource, getWebhookSources, createWebhookSource, updateWebhookSource, deleteWebhookSource } from "@/lib/webhook-storage";
 import { supabase } from "@/integrations/supabase/client";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const WebhookConfig = () => {
   const { user } = useSession();
@@ -130,6 +131,7 @@ const WebhookConfig = () => {
   const successRate = totalAttempts > 0 ? ((successCount / totalAttempts) * 100).toFixed(1) : "—";
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -264,6 +266,7 @@ const WebhookConfig = () => {
         </CardContent>
       </Card>
     </div>
+    </RequireSubscription>
   );
 };
 

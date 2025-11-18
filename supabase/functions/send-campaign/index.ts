@@ -70,6 +70,7 @@ serve(async (req) => {
       .from('campaigns')
       .select('*')
       .eq('id', campaignId)
+      .eq('user_id', userId)
       .single();
 
     if (campaignError || !campaign) {
@@ -113,6 +114,21 @@ serve(async (req) => {
     }
 
     // 3. Buscar contatos
+    const { data: listOwner } = await supabaseClient
+      .from('contact_lists')
+      .select('id')
+      .eq('id', campaign.contact_list_id)
+      .eq('user_id', userId)
+      .single();
+    if (!listOwner) {
+      await supabaseClient.from('campaigns').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', campaignId);
+      await addLog(campaignId, userId, 'campaign_status_update', `Status da campanha definido para "falha". Lista de contatos não pertence ao usuário.`);
+      return new Response(JSON.stringify({ error: 'Lista de contatos não pertence ao usuário' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 403,
+      });
+    }
+
     const { data: contacts, error: contactsError } = await supabaseClient
       .from('contacts')
       .select('*')

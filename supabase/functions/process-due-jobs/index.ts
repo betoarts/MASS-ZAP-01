@@ -215,6 +215,7 @@ async function fetchInstanceAndContacts(job: any, userId: string, supabase: any)
     .from('instances')
     .select('*')
     .eq('id', instanceId)
+    .eq('user_id', userId)
     .single();
 
   if (instanceError || !instance) {
@@ -223,7 +224,15 @@ async function fetchInstanceAndContacts(job: any, userId: string, supabase: any)
 
   let contacts = [];
   if (contactListId) {
-    // Busca contatos da lista, garantindo que o usuário tem permissão (RLS)
+    const { data: listOwner } = await supabase
+      .from('contact_lists')
+      .select('id')
+      .eq('id', contactListId)
+      .eq('user_id', userId)
+      .single();
+    if (!listOwner) {
+      throw new Error('Lista de contatos não pertence ao usuário');
+    }
     const { data: fetchedContacts } = await supabase
       .from('contacts')
       .select('id, phone_number, full_name, first_name, custom_data')

@@ -10,6 +10,7 @@ import { ClientForm } from "@/components/crm/ClientForm";
 import { SendProposalForm } from "@/components/crm/SendProposalForm";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { toast } from "sonner";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const CRM = () => {
   const [customers, setCustomers] = React.useState<Customer[]>([]);
@@ -87,6 +88,7 @@ const CRM = () => {
   };
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Gerenciamento de Clientes (CRM)</h1>
@@ -122,6 +124,7 @@ const CRM = () => {
         </Dialog>
       )}
     </div>
+    </RequireSubscription>
   );
 };
 

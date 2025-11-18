@@ -14,6 +14,7 @@ import { useSession } from "@/components/auth/SessionContextProvider";
 import { CampaignFormData } from "@/lib/campaign-utils";
 import PageHeader from "@/components/layout/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const Campaigns = () => {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
@@ -59,7 +60,7 @@ const Campaigns = () => {
       if (updatedCampaign) {
         toast.success("Campanha atualizada com sucesso!");
         if (shouldAutoStart) {
-          const { data, error } = await supabase.functions.invoke('send-campaign', {
+          const { error } = await supabase.functions.invoke('send-campaign', {
             body: { campaignId: editingCampaign.id, userId: user.id },
           });
           if (error) {
@@ -84,7 +85,7 @@ const Campaigns = () => {
             toast.error("Falha ao agendar automaticamente a campanha.");
           }
         } else if (shouldAutoStart) {
-          const { data, error } = await supabase.functions.invoke('send-campaign', {
+          const { error } = await supabase.functions.invoke('send-campaign', {
             body: { campaignId: newCampaign.id, userId: user.id },
           });
           if (error) {
@@ -122,6 +123,7 @@ const Campaigns = () => {
   };
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <PageHeader
         title="Gerenciamento de Campanhas"
@@ -158,6 +160,7 @@ const Campaigns = () => {
         onCampaignStatusChange={fetchCampaignData}
       />
     </div>
+    </RequireSubscription>
   );
 };
 

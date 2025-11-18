@@ -26,10 +26,82 @@ import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import PageHeader from "@/components/layout/PageHeader";
 import { useSession } from "@/components/auth/SessionContextProvider";
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useSession();
+  const [needsSubscription, setNeedsSubscription] = React.useState(false);
+  const [isAdmin, setIsAdmin] = React.useState(false);
+
+  React.useEffect(() => {
+    const run = async () => {
+      if (!user) { setNeedsSubscription(false); setIsAdmin(false); return; }
+      const { data: prof } = await supabase.from("profiles").select("is_admin").eq("id", user.id).single();
+      setIsAdmin(!!prof?.is_admin);
+      const { data } = await supabase
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      const status = data && data[0]?.status ? String(data[0].status) : null;
+      setNeedsSubscription(!prof?.is_admin && !(status && (status === "trialing" || status === "active")));
+    };
+    run();
+  }, [user?.id]);
+
+  const startCheckout = async () => {
+    if (!user) return;
+    const priceId = import.meta.env.VITE_STRIPE_PRICE_ID as string | undefined;
+    if (!priceId) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("stripe-create-checkout-session", {
+        body: { userId: user.id, priceId, success_url: window.location.origin + "/", cancel_url: window.location.origin + "/" },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.url) { window.location.href = data.url; return; }
+    } catch (_) {
+      const { data: sess } = await supabase.auth.getSession();
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-create-checkout-session`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: sess?.session?.access_token ? `Bearer ${sess.session.access_token}` : "",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId: user.id, priceId, success_url: window.location.origin + "/", cancel_url: window.location.origin + "/" }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (resp.ok && json?.url) { window.location.href = json.url as string; }
+    }
+  };
+
+  const openBillingPortal = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("stripe-create-billing-portal", {
+        body: { userId: user.id, return_url: window.location.origin + "/" },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.url) { window.location.href = data.url; return; }
+    } catch (_) {
+      const { data: sess } = await supabase.auth.getSession();
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-create-billing-portal`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: sess?.session?.access_token ? `Bearer ${sess.session.access_token}` : "",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId: user.id, return_url: window.location.origin + "/" }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (resp.ok && json?.url) { window.location.href = json.url as string; }
+    }
+  };
 
   const { data: instances, isLoading: isLoadingInstances } = useQuery({
     queryKey: ["instances", user?.id],
@@ -137,6 +209,19 @@ const Dashboard = () => {
   return (
     <div className="flex flex-col min-h-[calc(100vh-64px)] space-y-6">
       <PageHeader title="Painel" subtitle="Resumo geral das suas atividades e campanhas" />
+
+      {user && needsSubscription && !isAdmin && (
+        <div className="rounded-md border p-4 flex items-center justify-between">
+          <div>
+            <div className="font-semibold">Assinatura necessária</div>
+            <div className="text-sm text-muted-foreground">Ative sua assinatura para acessar os recursos completos.</div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={startCheckout}>Assinar</Button>
+            <Button onClick={openBillingPortal}>Gerenciar</Button>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">

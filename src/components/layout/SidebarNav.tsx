@@ -47,12 +47,22 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ onLinkClick }) => {
   ];
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error("Erro ao fazer logout:", error.message);
-      toast.error("Falha ao fazer logout.", { description: error.message });
-    } else {
-      toast.success("Você foi desconectado com sucesso.");
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data?.session) {
+        navigate("/login");
+        onLinkClick?.();
+        return;
+      }
+      const { error } = await supabase.auth.signOut();
+      if (error && error.message && !/Auth session missing/i.test(error.message)) {
+        toast.error("Falha ao fazer logout.", { description: error.message });
+      } else {
+        toast.success("Você foi desconectado com sucesso.");
+        navigate("/login");
+        onLinkClick?.();
+      }
+    } catch (e: any) {
       navigate("/login");
       onLinkClick?.();
     }

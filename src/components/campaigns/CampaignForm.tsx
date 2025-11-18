@@ -122,10 +122,12 @@ export const CampaignForm: React.FC<CampaignFormProps> = ({
       const textarea = messageTextareaRef.current;
       if (textarea) {
         const { selectionStart, selectionEnd, value } = textarea;
-        const newText = value.substring(0, selectionStart) + emojiData.emoji + value.substring(selectionEnd);
+        const start = selectionStart ?? value.length;
+        const end = selectionEnd ?? start;
+        const newText = value.substring(0, start) + emojiData.emoji + value.substring(end);
         form.setValue("messageText", newText);
         // Manually set cursor position after inserting emoji
-        const newCursorPosition = selectionStart + emojiData.emoji.length;
+        const newCursorPosition = start + emojiData.emoji.length;
         textarea.focus();
         textarea.setSelectionRange(newCursorPosition, newCursorPosition);
       }
@@ -133,10 +135,12 @@ export const CampaignForm: React.FC<CampaignFormProps> = ({
       const input = mediaCaptionInputRef.current;
       if (input) {
         const { selectionStart, selectionEnd, value } = input;
-        const newText = value.substring(0, selectionStart) + emojiData.emoji + value.substring(selectionEnd);
+        const start = selectionStart ?? value.length;
+        const end = selectionEnd ?? start;
+        const newText = value.substring(0, start) + emojiData.emoji + value.substring(end);
         form.setValue("mediaCaption", newText);
         // Manually set cursor position after inserting emoji
-        const newCursorPosition = selectionStart + emojiData.emoji.length;
+        const newCursorPosition = start + emojiData.emoji.length;
         input.focus();
         input.setSelectionRange(newCursorPosition, newCursorPosition);
       }
@@ -407,9 +411,13 @@ export const CampaignForm: React.FC<CampaignFormProps> = ({
                   <div className="p-3 border-t border-border">
                     <Input
                       type="time"
+                      inputMode="numeric"
+                      step={60}
                       value={field.value ? format(new Date(field.value), "HH:mm") : ""}
                       onChange={(e) => {
-                        const [hours, minutes] = e.target.value.split(':').map(Number);
+                        const [hStr, mStr] = e.target.value.split(":");
+                        let hours = Math.min(Math.max(parseInt(hStr || "0", 10), 0), 23);
+                        let minutes = Math.min(Math.max(parseInt(mStr || "0", 10), 0), 59);
                         const date = field.value ? new Date(field.value) : new Date();
                         date.setHours(hours);
                         date.setMinutes(minutes);

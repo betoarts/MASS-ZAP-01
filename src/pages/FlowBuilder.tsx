@@ -12,6 +12,7 @@ import { useSession } from '@/components/auth/SessionContextProvider';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { RequireSubscription } from '@/components/auth/RequireSubscription';
 
 const FlowBuilder: React.FC = () => {
   const { flowId } = useParams<{ flowId: string }>();
@@ -131,6 +132,7 @@ const FlowBuilder: React.FC = () => {
   };
 
   return (
+    <RequireSubscription>
     <div className="flex flex-col h-screen">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
@@ -192,6 +194,7 @@ const FlowBuilder: React.FC = () => {
         />
       </div>
     </div>
+    </RequireSubscription>
   );
 };
 

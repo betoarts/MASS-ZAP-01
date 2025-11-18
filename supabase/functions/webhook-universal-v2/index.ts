@@ -186,6 +186,21 @@ serve(async (req) => {
     }
 
     // Verificar se o contato já existe na lista informada (listId é a lista de contatos)
+    const { data: listOwner } = await supabaseClient
+      .from('contact_lists')
+      .select('id')
+      .eq('id', listId)
+      .eq('user_id', userId)
+      .single();
+    if (!listOwner) {
+      const errorMessage = `Lista de contatos não pertence ao usuário.`;
+      await addLog(userId!, 'webhook_auth_error', errorMessage, { listId });
+      return new Response(JSON.stringify({ error: errorMessage }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const { data: existingContacts, error: fetchContactError } = await supabaseClient
       .from('contacts')
       .select('id')

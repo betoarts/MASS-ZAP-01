@@ -21,9 +21,98 @@ export const HeaderBar: React.FC = () => {
 
   const [firstName, setFirstName] = React.useState<string>("");
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+  const [plan, setPlan] = React.useState<string | null>(null);
   const [notifOpen, setNotifOpen] = React.useState(false);
   const [notifications, setNotifications] = React.useState<Array<{ id: string; type: string; message: string; created_at: string; campaign_id?: string; execution_id?: string; flow_id?: string }>>([]);
   const [unread, setUnread] = React.useState(0);
+  const formatNotifType = (t: string) => {
+    const titles: Record<string, string> = {
+      webhook_received: "Webhook recebido",
+      webhook_error: "Erro de webhook",
+      webhook_auth_error: "Erro de autenticação do webhook",
+      message_sent: "Mensagem enviada",
+      message_failed: "Falha no envio",
+      message_error: "Erro de mensagem",
+      campaign_created: "Campanha criada",
+      campaign_scheduled: "Campanha agendada",
+      campaign_started: "Campanha iniciada",
+      campaign_completed: "Campanha concluída",
+      campaign_failed: "Falha na campanha",
+      campaign_status_update: "Status da campanha atualizado",
+      scheduler_started: "Agendador iniciou",
+      scheduler_invoked: "Agendador invocou envio",
+      scheduler_error: "Erro do agendador",
+      job_send_message: "Bloco concluído: Enviar Texto",
+      job_send_media: "Bloco concluído: Enviar Mídia",
+    };
+    return titles[t] ?? t;
+  };
+
+  const startCheckout = async () => {
+    if (!user) return;
+    const priceId = import.meta.env.VITE_STRIPE_PRICE_ID as string | undefined;
+    if (!priceId) {
+      toast.error("Preço do Stripe não configurado");
+      return;
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke("stripe-create-checkout-session", {
+        body: { userId: user.id, priceId, success_url: window.location.origin + "/", cancel_url: window.location.origin + "/" },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.url) { window.location.href = data.url; return; }
+      throw new Error("Sessão de checkout não retornou URL");
+    } catch (_) {
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-create-checkout-session`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            Authorization: sess?.session?.access_token ? `Bearer ${sess.session.access_token}` : "",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ userId: user.id, priceId, success_url: window.location.origin + "/", cancel_url: window.location.origin + "/" }),
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (resp.ok && json?.url) { window.location.href = json.url as string; return; }
+        toast.error("Falha ao iniciar checkout", { description: json?.error || resp.statusText });
+      } catch (e: any) {
+        toast.error("Falha ao iniciar checkout", { description: e?.message });
+      }
+    }
+  };
+  const openBillingPortal = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("stripe-create-billing-portal", {
+        body: { userId: user.id, return_url: window.location.origin + "/" },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.url) { window.location.href = data.url; return; }
+      throw new Error("Portal não retornou URL");
+    } catch (_) {
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-create-billing-portal`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            Authorization: sess?.session?.access_token ? `Bearer ${sess.session.access_token}` : "",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ userId: user.id, return_url: window.location.origin + "/" }),
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (resp.ok && json?.url) { window.location.href = json.url as string; return; }
+        toast.error("Falha ao abrir portal", { description: json?.error || resp.statusText });
+      } catch (e: any) {
+        toast.error("Falha ao abrir portal", { description: e?.message });
+      }
+    }
+  };
 
   const deriveFirstNameFromEmail = (email?: string | null) => {
     if (!email) return "";
@@ -59,6 +148,21 @@ export const HeaderBar: React.FC = () => {
       if (isMounted) {
         setFirstName(resolvedFirst);
         setAvatarUrl(resolvedAvatar);
+      }
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", user.id)
+        .single();
+      const { data: subs } = await supabase
+        .from("subscriptions")
+        .select("plan,status")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      const subPlan = prof?.is_admin ? "Admin" : subs && subs[0]?.plan ? String(subs[0].plan) : subs && subs[0]?.status ? String(subs[0].status) : null;
+      if (isMounted) {
+        setPlan(subPlan);
       }
     };
     loadHeaderData();
@@ -176,12 +280,19 @@ export const HeaderBar: React.FC = () => {
     <div className="sticky top-0 z-30 mb-6">
       <div className="rounded-2xl bg-white/70 dark:bg-white/5 backdrop-blur supports-[backdrop-filter]:backdrop-blur border border-purple-100/70 dark:border-white/10 px-4 sm:px-6 py-3 shadow-[0_2px_12px_rgba(89,63,255,0.08)]">
         <div className="flex items-center gap-3">
-          <div className="hidden sm:block">
-            <div className="text-sm text-purple-700/80 dark:text-purple-200">
-              {firstName ? `Olá, ${firstName}` : "Olá"}
-            </div>
-            <div className="font-semibold text-purple-900 dark:text-purple-100">{pageTitle}</div>
-          </div>
+      <div className="hidden sm:block">
+        <div className="text-sm text-purple-700/80 dark:text-purple-200">
+          {firstName ? `Olá, ${firstName}` : "Olá"}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="font-semibold text-purple-900 dark:text-purple-100">{pageTitle}</div>
+          {plan ? (
+            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold border-purple-200 bg-purple-50 text-purple-700/90">
+              Plano: {plan}
+            </span>
+          ) : null}
+        </div>
+      </div>
 
           <div className="flex-1" />
 
@@ -218,7 +329,7 @@ export const HeaderBar: React.FC = () => {
                   notifications.map((n) => (
                     <div key={n.id} className="px-3 py-2 border-b last:border-0">
                       <div className="flex items-start gap-2">
-                        <Badge className="shrink-0">{n.type}</Badge>
+                        <Badge className="shrink-0">{formatNotifType(n.type)}</Badge>
                         <div className="text-sm">
                           <div className="font-medium">{n.message}</div>
                           <div className="text-xs text-muted-foreground">{new Date(n.created_at).toLocaleString()}</div>
@@ -237,6 +348,10 @@ export const HeaderBar: React.FC = () => {
                     </div>
                   ))
                 )}
+              </div>
+              <div className="p-3 flex gap-2 border-t">
+                <Button variant="outline" onClick={startCheckout}>Assinar</Button>
+                <Button onClick={openBillingPortal}>Gerenciar</Button>
               </div>
             </PopoverContent>
           </Popover>

@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 import { getCampaignById, Campaign } from "@/lib/campaign-storage";
 import { toast } from "sonner";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const CampaignLogs = () => {
   const { campaignId } = useParams<{ campaignId: string }>();
@@ -99,6 +100,7 @@ const CampaignLogs = () => {
   }
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -158,6 +160,7 @@ const CampaignLogs = () => {
         )}
       </div>
     </div>
+    </RequireSubscription>
   );
 };
 

@@ -10,6 +10,7 @@ import { ContactDetailsTable } from "@/components/contacts/ContactDetailsTable";
 import { ContactDetailsForm } from "@/components/contacts/ContactDetailsForm";
 import { toast } from "sonner";
 import { useSession } from "@/components/auth/SessionContextProvider"; // Import useSession
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const ContactDetails = () => {
   const { listId } = useParams<{ listId: string }>();
@@ -84,6 +85,7 @@ const ContactDetails = () => {
   }
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -112,6 +114,7 @@ const ContactDetails = () => {
         onDelete={handleDeleteContact}
       />
     </div>
+    </RequireSubscription>
   );
 };
 

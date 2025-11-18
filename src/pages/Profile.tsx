@@ -5,6 +5,7 @@ import { ProfileForm } from "@/components/profile/ProfileForm";
 import { getProfile, updateProfile, Profile } from "@/lib/profile-storage";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { toast } from "sonner";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const ProfilePage = () => {
   const { user, isLoading: isSessionLoading } = useSession();
@@ -54,10 +55,12 @@ const ProfilePage = () => {
   }
 
   return (
+    <RequireSubscription>
     <div className="space-y-6 max-w-lg mx-auto">
       <h1 className="text-3xl font-bold text-center">Meu Perfil</h1>
       <ProfileForm initialData={profile} onSave={handleSaveProfile} isLoading={isLoading} />
     </div>
+    </RequireSubscription>
   );
 };
 

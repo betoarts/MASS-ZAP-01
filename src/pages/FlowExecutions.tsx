@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { FlowExecutionTable } from "@/components/flow/FlowExecutionTable";
 import PageHeader from "@/components/layout/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const FlowExecutions: React.FC = () => {
   const { flowId } = useParams<{ flowId: string }>();
@@ -91,33 +92,35 @@ const FlowExecutions: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={`Execuções do Fluxo: ${flow.name}`}
-        subtitle="Histórico de todas as vezes que este fluxo foi iniciado."
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate(`/flows/${flowId}`)}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar ao Editor
-            </Button>
-            <Button onClick={fetchExecutions} disabled={isLoading}>
-              <RefreshCw className={isLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
-              {isLoading ? "Atualizando..." : "Atualizar"}
-            </Button>
-            <Button onClick={processNow} disabled={isProcessing}>
-              {isProcessing ? (
-                <span className="inline-flex items-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" />Processando…</span>
-              ) : (
-                "Processar Agora"
-              )}
-            </Button>
-          </div>
-        }
-      />
-      
-      <FlowExecutionTable executions={executions} isLoading={isLoading} />
-    </div>
+    <RequireSubscription>
+      <div className="space-y-6">
+        <PageHeader
+          title={`Execuções do Fluxo: ${flow.name}`}
+          subtitle="Histórico de todas as vezes que este fluxo foi iniciado."
+          actions={
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => navigate(`/flows/${flowId}`)}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Voltar ao Editor
+              </Button>
+              <Button onClick={fetchExecutions} disabled={isLoading}>
+                <RefreshCw className={isLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
+                {isLoading ? "Atualizando..." : "Atualizar"}
+              </Button>
+              <Button onClick={processNow} disabled={isProcessing}>
+                {isProcessing ? (
+                  <span className="inline-flex items-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" />Processando…</span>
+                ) : (
+                  "Processar Agora"
+                )}
+              </Button>
+            </div>
+          }
+        />
+
+        <FlowExecutionTable executions={executions} isLoading={isLoading} />
+      </div>
+    </RequireSubscription>
   );
 };
 

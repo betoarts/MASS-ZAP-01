@@ -15,6 +15,7 @@ import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const FlowExecutionDetails: React.FC = () => {
   const { flowId, executionId } = useParams<{ flowId: string, executionId: string }>();
@@ -122,89 +123,91 @@ const FlowExecutionDetails: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={`Detalhes da Execução: ${execution.id.substring(0, 8)}...`}
-        subtitle={`Fluxo ID: ${execution.flow_id.substring(0, 8)}...`}
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate(`/flows/${flowId}/executions`)}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar ao Histórico
-            </Button>
-            <Button onClick={fetchDetails} disabled={isLoading}>
-              <RefreshCw className={isLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
-              {isLoading ? "Atualizando..." : "Atualizar"}
-            </Button>
-            <Button onClick={processNow} disabled={isProcessing}>
-              {isProcessing ? (
-                <span className="inline-flex items-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" />Processando…</span>
-              ) : (
-                "Processar Agora"
-              )}
-            </Button>
-          </div>
-        }
-      />
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
-            {getStatusIcon(execution.status)}
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{getStatusBadge(execution.status)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {execution.completed_at ? `Concluído em ${format(new Date(execution.completed_at), "dd/MM HH:mm", { locale: ptBR })}` : "Em andamento"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Início</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {format(new Date(execution.started_at), "dd/MM/yyyy")}
+    <RequireSubscription>
+      <div className="space-y-6">
+        <PageHeader
+          title={`Detalhes da Execução: ${execution.id.substring(0, 8)}...`}
+          subtitle={`Fluxo ID: ${execution.flow_id.substring(0, 8)}...`}
+          actions={
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => navigate(`/flows/${flowId}/executions`)}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Voltar ao Histórico
+              </Button>
+              <Button onClick={fetchDetails} disabled={isLoading}>
+                <RefreshCw className={isLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
+                {isLoading ? "Atualizando..." : "Atualizar"}
+              </Button>
+              <Button onClick={processNow} disabled={isProcessing}>
+                {isProcessing ? (
+                  <span className="inline-flex items-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" />Processando…</span>
+                ) : (
+                  "Processar Agora"
+                )}
+              </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {format(new Date(execution.started_at), "HH:mm:ss", { locale: ptBR })}
-            </p>
-          </CardContent>
-        </Card>
+          }
+        />
 
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Contexto Inicial</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full justify-start truncate">
-                  {JSON.stringify(execution.context)}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-md p-2">
-                <pre className="text-xs whitespace-pre-wrap break-all">
-                  {JSON.stringify(execution.context, null, 2)}
-                </pre>
-              </TooltipContent>
-            </Tooltip>
-            {execution.error_message && (
-              <p className="text-xs text-red-600 mt-2">
-                Erro: {execution.error_message}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Status</CardTitle>
+              {getStatusIcon(execution.status)}
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{getStatusBadge(execution.status)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {execution.completed_at ? `Concluído em ${format(new Date(execution.completed_at), "dd/MM HH:mm", { locale: ptBR })}` : "Em andamento"}
               </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
 
-      <h2 className="text-2xl font-bold pt-4">Jobs Processados</h2>
-      <FlowJobTable jobs={jobs} isLoading={isLoading} />
-    </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Início</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {format(new Date(execution.started_at), "dd/MM/yyyy")}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {format(new Date(execution.started_at), "HH:mm:ss", { locale: ptBR })}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-1">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Contexto Inicial</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-start truncate">
+                    {JSON.stringify(execution.context)}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-md p-2">
+                  <pre className="text-xs whitespace-pre-wrap break-all">
+                    {JSON.stringify(execution.context, null, 2)}
+                  </pre>
+                </TooltipContent>
+              </Tooltip>
+              {execution.error_message && (
+                <p className="text-xs text-red-600 mt-2">
+                  Erro: {execution.error_message}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <h2 className="text-2xl font-bold pt-4">Jobs Processados</h2>
+        <FlowJobTable jobs={jobs} isLoading={isLoading} />
+      </div>
+    </RequireSubscription>
   );
 };
 

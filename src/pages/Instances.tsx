@@ -10,6 +10,7 @@ import { Instance, getInstances, saveInstance, deleteInstance } from "@/lib/stor
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const Instances = () => {
   const [instances, setInstances] = React.useState<Instance[]>([]);
@@ -86,6 +87,7 @@ const Instances = () => {
   };
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <PageHeader
         title="Gerenciamento de Instâncias"
@@ -112,6 +114,7 @@ const Instances = () => {
         onImportConfig={handleImportConfig}
       />
     </div>
+    </RequireSubscription>
   );
 };
 

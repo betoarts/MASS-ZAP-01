@@ -11,6 +11,7 @@ import { ContactImportDialog } from "@/components/contacts/ContactImportDialog";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
+import { RequireSubscription } from "@/components/auth/RequireSubscription";
 
 const Contacts = () => {
   const [contactLists, setContactLists] = React.useState<ContactList[]>([]);
@@ -74,6 +75,7 @@ const Contacts = () => {
   };
 
   return (
+    <RequireSubscription>
     <div className="space-y-6">
       <PageHeader
         title="Gerenciamento de Contatos"
@@ -109,6 +111,7 @@ const Contacts = () => {
         />
       )}
     </div>
+    </RequireSubscription>
   );
 };
 
