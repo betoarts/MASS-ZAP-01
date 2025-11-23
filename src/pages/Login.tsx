@@ -1,12 +1,11 @@
 "use client";
 
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { ptBR } from '@/lib/supabase-pt-br';
-import { supabase } from '@/integrations/supabase/client';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/components/auth/SessionContextProvider';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LoginForm } from '@/components/auth/LoginForm';
+import { RegisterForm } from '@/components/auth/RegisterForm';
 
 function Login() {
   const navigate = useNavigate();
@@ -34,37 +33,23 @@ function Login() {
                 target.src = '/logo.png';
               }
             }} />
-            <h2 className="mt-2 text-center text-2xl font-bold text-purple-900 dark:text-purple-100">
-              Faça login na sua conta
+            <h2 className="mt-2 text-center text-2xl font-bold text-purple-900 dark:text-purple-100 mb-6">
+              Bem-vindo ao MassZapp
             </h2>
           </div>
-          <div className="mt-6">
-            <Auth
-              supabaseClient={supabase}
-              providers={[]}
-              appearance={{
-                theme: ThemeSupa,
-                variables: {
-                  default: {
-                    colors: {
-                      brand: 'hsl(var(--primary))',
-                      brandAccent: 'hsl(var(--primary))',
-                      inputBackground: 'transparent',
-                    },
-                  },
-                },
-                className: {
-                  input: 'rounded-md border-purple-100 dark:border-white/10 bg-white/70 dark:bg-white/5',
-                  button: 'rounded-md',
-                },
-              }}
-              theme="light"
-              redirectTo={window.location.origin}
-              localization={{
-                variables: ptBR.variables,
-              }}
-            />
-          </div>
+          
+          <Tabs defaultValue="login" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="login">Entrar</TabsTrigger>
+              <TabsTrigger value="register">Cadastrar</TabsTrigger>
+            </TabsList>
+            <TabsContent value="login">
+              <LoginForm />
+            </TabsContent>
+            <TabsContent value="register">
+              <RegisterForm />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
