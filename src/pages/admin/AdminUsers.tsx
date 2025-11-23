@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
@@ -9,18 +9,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { format, addDays } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Search, MoreHorizontal, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Loader2, MoreHorizontal, UserPlus, MessageSquare } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,12 +22,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { addCustomer, getCustomers } from "@/lib/crm-storage";
+import { SendProposalForm } from "@/components/crm/SendProposalForm";
+import { useSession } from "@/components/auth/SessionContextProvider";
 
 interface Profile {
   id: string;
   first_name: string | null;
   last_name: string | null;
-  email?: string; // Joined from auth.users if possible, or we just use what we have
+  email?: string;
+  phone?: string | null;
   account_status: "active" | "paused" | "blocked" | "pending";
   trial_ends_at: string | null;
   instance_count: number;
@@ -42,41 +48,41 @@ interface Profile {
   is_admin: boolean;
 }
 
-export const AdminUsers = () => {
-  const [users, setUsers] = React.useState<Profile[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [search, setSearch] = React.useState("");
-  const [selectedUser, setSelectedUser] = React.useState<Profile | null>(null);
-  const [trialDays, setTrialDays] = React.useState(7);
-  const [isTrialDialogOpen, setIsTrialDialogOpen] = React.useState(false);
+export function AdminUsers() {
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isTrialDialogOpen, setIsTrialDialogOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [trialDays, setTrialDays] = useState("3");
+  const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
+  const [selectedUserForMessage, setSelectedUserForMessage] = useState<Profile | null>(null);
+  const { user: currentUser } = useSession();
 
   const fetchUsers = async () => {
-    setLoading(true);
     try {
-      // Note: Joining with auth.users is not directly possible via client SDK easily without a view or function.
-      // For now, we'll list profiles. If we need emails, we might need a secure function or just rely on profile data if synced.
-      // Assuming profiles has what we need or we can't get email easily without admin API.
-      // Let's fetch profiles.
-      const { data, error } = await supabase
+      const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setUsers((data as unknown as Profile[]) || []);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      toast.error("Erro ao carregar usuários", { description: errorMessage });
+
+      setUsers(profiles as Profile[]);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao carregar usuários", {
+        description: errorMessage,
+      });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     fetchUsers();
   }, []);
 
-  const handleStatusChange = async (userId: string, newStatus: string) => {
+  const handleStatusChange = async (userId: string, newStatus: Profile['account_status']) => {
     try {
       const { error } = await supabase
         .from("profiles")
@@ -84,42 +90,99 @@ export const AdminUsers = () => {
         .eq("id", userId);
 
       if (error) throw error;
-      toast.success(`Status atualizado para ${newStatus}`);
-      fetchUsers();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      toast.error("Erro ao atualizar status", { description: errorMessage });
+
+      setUsers(users.map(user => 
+        user.id === userId ? { ...user, account_status: newStatus } : user
+      ));
+
+      toast.success("Status atualizado com sucesso");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao atualizar status", {
+        description: errorMessage,
+      });
     }
   };
 
   const handleAddTrial = async () => {
-    if (!selectedUser) return;
+    if (!selectedUserId) return;
+
     try {
-      const currentEnd = selectedUser.trial_ends_at ? new Date(selectedUser.trial_ends_at) : new Date();
-      // If trial expired or null, start from now. If active, add to end.
-      const baseDate = currentEnd < new Date() ? new Date() : currentEnd;
-      const newDate = addDays(baseDate, trialDays);
+      const days = parseInt(trialDays);
+      const trialEndsAt = new Date();
+      trialEndsAt.setDate(trialEndsAt.getDate() + days);
 
       const { error } = await supabase
         .from("profiles")
-        .update({ trial_ends_at: newDate.toISOString(), account_status: 'active' }) // Ensure active if giving trial
-        .eq("id", selectedUser.id);
+        .update({ 
+          trial_ends_at: trialEndsAt.toISOString(),
+          account_status: 'active'
+        })
+        .eq("id", selectedUserId);
 
       if (error) throw error;
-      toast.success(`Trial estendido até ${format(newDate, "dd/MM/yyyy")}`);
+
+      setUsers(users.map(user => 
+        user.id === selectedUserId ? { 
+          ...user, 
+          trial_ends_at: trialEndsAt.toISOString(),
+          account_status: 'active'
+        } : user
+      ));
+
+      toast.success("Período de teste adicionado com sucesso");
       setIsTrialDialogOpen(false);
-      fetchUsers();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      toast.error("Erro ao adicionar dias de trial", { description: errorMessage });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao adicionar período de teste", {
+        description: errorMessage,
+      });
     }
   };
 
-  const filteredUsers = users.filter((u) =>
-    (u.first_name?.toLowerCase() || "").includes(search.toLowerCase()) ||
-    (u.last_name?.toLowerCase() || "").includes(search.toLowerCase()) ||
-    (u.id.includes(search))
-  );
+  const handleAddToCRM = async (profile: Profile) => {
+    if (!currentUser) return;
+
+    try {
+      const existingCustomers = await getCustomers();
+      const exists = existingCustomers.some(c => 
+        (profile.phone && c.phone_number === profile.phone) || 
+        (profile.email && c.email === profile.email)
+      );
+
+      if (exists) {
+        toast.info("Este usuário já está no seu CRM.");
+        return;
+      }
+
+      const newCustomer = await addCustomer(currentUser.id, {
+        name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Sem Nome',
+        phone_number: profile.phone || '',
+        email: profile.email || '',
+        notes: `Adicionado via Admin Users em ${new Date().toLocaleDateString()}`
+      });
+
+      if (newCustomer) {
+        toast.success("Usuário adicionado ao CRM com sucesso!");
+      } else {
+        throw new Error("Falha ao adicionar ao CRM");
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao adicionar ao CRM", {
+        description: errorMessage
+      });
+    }
+  };
+
+  const handleOpenMessageModal = (profile: Profile) => {
+    if (!profile.phone) {
+      toast.error("Este usuário não possui telefone cadastrado.");
+      return;
+    }
+    setSelectedUserForMessage(profile);
+    setIsMessageModalOpen(true);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -131,95 +194,100 @@ export const AdminUsers = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Gerenciar Usuários</h2>
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold tracking-tight">Gerenciar Usuários</h1>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nome ou ID..."
-            className="pl-8"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="rounded-md border bg-white dark:bg-gray-800">
+      <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Trial Até</TableHead>
-              <TableHead>Instâncias</TableHead>
+              <TableHead>Telefone</TableHead>
+              <TableHead>Teste até</TableHead>
               <TableHead>Criado em</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell className="font-medium">
+                  {user.first_name} {user.last_name}
+                  {user.is_admin && <Badge variant="secondary" className="ml-2">Admin</Badge>}
+                </TableCell>
+                <TableCell>{getStatusBadge(user.account_status)}</TableCell>
+                <TableCell>
+                  {user.phone ? (
+                    <Button 
+                      variant="link" 
+                      className="p-0 h-auto" 
+                      onClick={() => handleOpenMessageModal(user)}
+                    >
+                      {user.phone}
+                    </Button>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">Não informado</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {user.trial_ends_at 
+                    ? format(new Date(user.trial_ends_at), "dd/MM/yyyy", { locale: ptBR })
+                    : "-"
+                  }
+                </TableCell>
+                <TableCell>
+                  {format(new Date(user.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <span className="sr-only">Abrir menu</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => handleAddToCRM(user)}>
+                        <UserPlus className="mr-2 h-4 w-4" /> Adicionar ao CRM
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleOpenMessageModal(user)}>
+                        <MessageSquare className="mr-2 h-4 w-4" /> Enviar Mensagem
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => handleStatusChange(user.id, "active")}>
+                        Ativar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleStatusChange(user.id, "paused")}>
+                        Pausar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleStatusChange(user.id, "blocked")}>
+                        Bloquear
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => {
+                        setSelectedUserId(user.id);
+                        setIsTrialDialogOpen(true);
+                      }}>
+                        Gerenciar Teste
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
               </TableRow>
-            ) : filteredUsers.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">Nenhum usuário encontrado</TableCell>
-              </TableRow>
-            ) : (
-              filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex flex-col">
-                      <span>{user.first_name} {user.last_name}</span>
-                      <span className="text-xs text-muted-foreground font-mono">{user.id}</span>
-                      {user.is_admin && <Badge variant="secondary" className="w-fit mt-1 text-[10px]">Admin</Badge>}
-                    </div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(user.account_status || 'active')}</TableCell>
-                  <TableCell>
-                    {user.trial_ends_at ? (
-                      <span className={new Date(user.trial_ends_at) < new Date() ? "text-red-500" : "text-green-600"}>
-                        {format(new Date(user.trial_ends_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>{user.instance_count || 0}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {format(new Date(user.created_at), "dd/MM/yyyy", { locale: ptBR })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => { setSelectedUser(user); setIsTrialDialogOpen(true); }}>
-                          <ShieldCheck className="mr-2 h-4 w-4" /> Adicionar Trial
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleStatusChange(user.id, "active")}>
-                          Ativar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(user.id, "paused")}>
-                          Pausar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(user.id, "blocked")} className="text-red-600">
-                          <ShieldAlert className="mr-2 h-4 w-4" /> Bloquear
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
+            ))}
           </TableBody>
         </Table>
       </div>
@@ -227,34 +295,46 @@ export const AdminUsers = () => {
       <Dialog open={isTrialDialogOpen} onOpenChange={setIsTrialDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adicionar Dias de Trial</DialogTitle>
+            <DialogTitle>Adicionar Período de Teste</DialogTitle>
+            <DialogDescription>
+              Defina quantos dias de teste este usuário terá. Isso ativará a conta automaticamente.
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Adicionar dias gratuitos para <strong>{selectedUser?.first_name}</strong>.
-              Isso estenderá a data atual de término ou iniciará um novo período a partir de hoje.
-            </p>
-            <div className="flex items-center gap-4">
-              <Button variant="outline" onClick={() => setTrialDays(7)}>7 Dias</Button>
-              <Button variant="outline" onClick={() => setTrialDays(15)}>15 Dias</Button>
-              <Button variant="outline" onClick={() => setTrialDays(30)}>30 Dias</Button>
-            </div>
-            <div className="grid gap-2">
-              <label htmlFor="days" className="text-sm font-medium">Dias personalizados</label>
-              <Input
-                id="days"
-                type="number"
-                value={trialDays}
-                onChange={(e) => setTrialDays(Number(e.target.value))}
-              />
-            </div>
+          <div className="py-4">
+            <Input
+              type="number"
+              value={trialDays}
+              onChange={(e) => setTrialDays(e.target.value)}
+              placeholder="Dias de teste"
+            />
           </div>
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setIsTrialDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAddTrial}>Confirmar</Button>
-          </div>
+            <Button onClick={handleAddTrial}>Salvar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedUserForMessage && (
+        <Dialog open={isMessageModalOpen} onOpenChange={setIsMessageModalOpen}>
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Enviar Mensagem para {selectedUserForMessage.first_name}</DialogTitle>
+            </DialogHeader>
+            <SendProposalForm 
+              customer={{
+                id: 'temp', // Temporary ID
+                user_id: currentUser?.id || '',
+                name: `${selectedUserForMessage.first_name} ${selectedUserForMessage.last_name}`,
+                phone_number: selectedUserForMessage.phone || '',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }} 
+              onProposalSent={() => setIsMessageModalOpen(false)} 
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
-};
+}

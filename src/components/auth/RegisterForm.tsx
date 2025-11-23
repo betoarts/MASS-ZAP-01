@@ -21,6 +21,7 @@ import { Loader2 } from "lucide-react";
 const formSchema = z.object({
   firstName: z.string().min(2, "Nome deve ter no mínimo 2 caracteres"),
   lastName: z.string().min(2, "Sobrenome deve ter no mínimo 2 caracteres"),
+  phone: z.string().min(10, "Telefone deve ter no mínimo 10 dígitos"),
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
 });
@@ -33,6 +34,7 @@ export function RegisterForm() {
     defaultValues: {
       firstName: "",
       lastName: "",
+      phone: "",
       email: "",
       password: "",
     },
@@ -48,6 +50,7 @@ export function RegisterForm() {
           data: {
             first_name: values.firstName,
             last_name: values.lastName,
+            phone: values.phone,
           },
         },
       });
@@ -60,9 +63,13 @@ export function RegisterForm() {
         description: "Verifique seu email para confirmar o cadastro.",
       });
       
-    } catch (error: any) {
+    } catch (error) {
+      let errorMessage = "Erro desconhecido";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
       toast.error("Erro ao criar conta", {
-        description: error.message,
+        description: errorMessage,
       });
     } finally {
       setIsLoading(false);
@@ -100,6 +107,19 @@ export function RegisterForm() {
             )}
           />
         </div>
+        <FormField
+          control={form.control}
+          name="phone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>WhatsApp / Telefone</FormLabel>
+              <FormControl>
+                <Input placeholder="5511999999999" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <FormField
           control={form.control}
           name="email"
