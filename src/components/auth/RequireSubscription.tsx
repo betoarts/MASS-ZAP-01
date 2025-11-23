@@ -4,71 +4,110 @@ import * as React from "react";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { AlertTriangle, Lock, Clock } from "lucide-react";
 
 interface RequireSubscriptionProps {
   children: React.ReactNode;
   allowed?: Array<string>;
 }
 
-export const RequireSubscription: React.FC<RequireSubscriptionProps> = ({ children, allowed = ["trialing", "active"] }) => {
+export const RequireSubscription: React.FC<RequireSubscriptionProps> = ({ children }) => {
   const { user } = useSession();
-  const [status, setStatus] = React.useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = React.useState<boolean>(false);
-  const [loading, setLoading] = React.useState(true);
+  const [status, setStatus] = React.useState<"loading" | "allowed" | "blocked" | "paused" | "trial_expired">("loading");
+  const [trialEndsAt, setTrialEndsAt] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    const load = async () => {
-      if (!user) { setLoading(false); setStatus(null); return; }
+    let isMounted = true;
+    const checkStatus = async () => {
+      if (!user) return;
+
       const { data: profile } = await supabase
         .from("profiles")
-        .select("is_admin")
+        .select("is_admin, account_status, trial_ends_at")
         .eq("id", user.id)
         .single();
-      setIsAdmin(!!profile?.is_admin);
-      const { data } = await supabase
-        .from("subscriptions")
-        .select("status")
-        .eq("user_id", user.id)
-        .order("updated_at", { ascending: false })
-        .limit(1);
-      const s = data && data[0]?.status ? String(data[0].status) : null;
-      setStatus(s);
-      setLoading(false);
+
+      if (!isMounted) return;
+
+      if (profile?.is_admin) {
+        setStatus("allowed");
+        return;
+      }
+
+      const accountStatus = profile?.account_status || "active";
+      const trialEnd = profile?.trial_ends_at;
+      setTrialEndsAt(trialEnd);
+
+      if (accountStatus === "blocked") {
+        setStatus("blocked");
+        return;
+      }
+
+      if (accountStatus === "paused") {
+        setStatus("paused");
+        return;
+      }
+
+      if (trialEnd && new Date(trialEnd) < new Date()) {
+        setStatus("trial_expired");
+        return;
+      }
+
+      setStatus("allowed");
     };
-    load();
-  }, [user?.id]);
 
-  const startCheckout = async () => {
-    if (!user) return;
-    const priceId = import.meta.env.VITE_STRIPE_PRICE_ID as string | undefined;
-    if (!priceId) return;
-    const { data } = await supabase.functions.invoke("stripe-create-checkout-session", {
-      body: { userId: user.id, priceId, success_url: window.location.origin + "/", cancel_url: window.location.origin + "/" },
-    });
-    if (data?.url) window.location.href = data.url;
-  };
+    checkStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
-  const openBillingPortal = async () => {
-    if (!user) return;
-    const { data } = await supabase.functions.invoke("stripe-create-billing-portal", {
-      body: { userId: user.id, return_url: window.location.origin + "/" },
-    });
-    if (data?.url) window.location.href = data.url;
-  };
+  if (status === "loading") {
+    return <div className="p-8 text-center text-muted-foreground">Verificando status da conta...</div>;
+  }
 
-  if (loading) return <div className="p-6">Carregando...</div>;
-  if (isAdmin) return <>{children}</>;
-  if (!user || !status || !allowed.includes(status)) {
+  if (status === "blocked") {
     return (
-      <div className="p-6 border rounded-md">
-        <div className="mb-3 font-semibold">Assinatura necessária</div>
-        <div className="text-sm mb-4">Para acessar este recurso, ative uma assinatura ou use o período de teste.</div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={startCheckout}>Assinar</Button>
-          <Button onClick={openBillingPortal}>Gerenciar</Button>
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center space-y-4 bg-red-50 rounded-lg border border-red-100">
+        <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mb-2">
+          <Lock className="h-8 w-8 text-red-600" />
         </div>
+        <h2 className="text-2xl font-bold text-red-800">Conta Bloqueada</h2>
+        <p className="text-red-600 max-w-md">
+          Sua conta foi bloqueada administrativamente. Entre em contato com o suporte para mais informações.
+        </p>
       </div>
     );
   }
+
+  if (status === "paused") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center space-y-4 bg-yellow-50 rounded-lg border border-yellow-100">
+        <div className="h-16 w-16 bg-yellow-100 rounded-full flex items-center justify-center mb-2">
+          <AlertTriangle className="h-8 w-8 text-yellow-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-yellow-800">Conta Pausada</h2>
+        <p className="text-yellow-600 max-w-md">
+          Sua conta está temporariamente pausada. Entre em contato com o administrador para reativar.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === "trial_expired") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center space-y-4 bg-purple-50 rounded-lg border border-purple-100">
+        <div className="h-16 w-16 bg-purple-100 rounded-full flex items-center justify-center mb-2">
+          <Clock className="h-8 w-8 text-purple-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-purple-800">Período de Teste Expirado</h2>
+        <p className="text-purple-600 max-w-md">
+          Seu período de teste terminou em {trialEndsAt && new Date(trialEndsAt).toLocaleDateString()}.
+          Entre em contato com o administrador para estender seu acesso.
+        </p>
+      </div>
+    );
+  }
+
   return <>{children}</>;
 };

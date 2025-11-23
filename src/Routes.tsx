@@ -15,9 +15,12 @@ import WebhookConfig from "./pages/WebhookConfig";
 import FlowList from "./pages/FlowList";
 import FlowBuilder from "./pages/FlowBuilder";
 import FlowExecutions from "./pages/FlowExecutions";
-import FlowExecutionDetails from "./pages/FlowExecutionDetails"; // Importar nova página
+import FlowExecutionDetails from "./pages/FlowExecutionDetails";
 import { useSession } from "./components/auth/SessionContextProvider";
 import React from "react";
+import { AdminLayout } from "./components/layout/AdminLayout";
+import { AdminUsers } from "./pages/admin/AdminUsers";
+import { AdminDashboard } from "./pages/admin/AdminDashboard";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session, isLoading } = useSession();
@@ -36,6 +39,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 export const Routes = () => (
   <ReactRoutes>
     <Route path="/login" element={<Login />} />
+    
+    {/* Admin Routes */}
+    <Route path="/admin" element={<AdminLayout />}>
+      <Route index element={<AdminDashboard />} />
+      <Route path="users" element={<AdminUsers />} />
+    </Route>
+
     <Route
       path="/"
       element={

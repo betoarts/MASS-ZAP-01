@@ -60,11 +60,13 @@ const Campaigns = () => {
       if (updatedCampaign) {
         toast.success("Campanha atualizada com sucesso!");
         if (shouldAutoStart) {
-          const { error } = await supabase.functions.invoke('send-campaign', {
+          const { data: invokeData, error } = await supabase.functions.invoke('send-campaign', {
             body: { campaignId: editingCampaign.id, userId: user.id },
           });
           if (error) {
-            toast.error("Falha ao iniciar campanha automaticamente", { description: error.message });
+            const errorMsg = (invokeData as any)?.error || error.message || 'Erro desconhecido';
+            console.error('send-campaign error:', error, 'response:', invokeData);
+            toast.error("Falha ao invocar send-campaign", { description: errorMsg });
           } else {
             toast.success("Campanha iniciada automaticamente");
           }
@@ -85,11 +87,13 @@ const Campaigns = () => {
             toast.error("Falha ao agendar automaticamente a campanha.");
           }
         } else if (shouldAutoStart) {
-          const { error } = await supabase.functions.invoke('send-campaign', {
+          const { data: invokeData, error } = await supabase.functions.invoke('send-campaign', {
             body: { campaignId: newCampaign.id, userId: user.id },
           });
           if (error) {
-            toast.error("Falha ao iniciar campanha automaticamente", { description: error.message });
+            const errorMsg = (invokeData as any)?.error || error.message || 'Erro desconhecido';
+            console.error('send-campaign error:', error, 'response:', invokeData);
+            toast.error("Falha ao invocar send-campaign", { description: errorMsg });
           } else {
             toast.success("Campanha iniciada automaticamente");
           }

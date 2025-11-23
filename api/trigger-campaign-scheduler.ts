@@ -21,9 +21,10 @@ export default async function (req: VercelRequest, res: VercelResponse) {
 
       const data = await response.json();
       return res.status(200).json({ message: 'Supabase Edge Function invoked successfully', data });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro no Vercel Cron Job:', error);
-      return res.status(500).json({ error: 'Internal Server Error', details: error.message });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return res.status(500).json({ error: 'Internal Server Error', details: errorMessage });
     }
   } else {
     return res.status(405).json({ error: 'Method Not Allowed' });

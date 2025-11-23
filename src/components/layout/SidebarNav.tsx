@@ -22,9 +22,11 @@ import {
   MessageCircle,
   Webhook,
   Workflow,
+  Shield
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useSession } from "@/components/auth/SessionContextProvider";
 
 interface SidebarNavProps {
   onLinkClick?: () => void;
@@ -33,6 +35,23 @@ interface SidebarNavProps {
 export const SidebarNav: React.FC<SidebarNavProps> = ({ onLinkClick }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useSession();
+  const [isAdmin, setIsAdmin] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkAdmin = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", user.id)
+        .single();
+      if (data?.is_admin) {
+        setIsAdmin(true);
+      }
+    };
+    checkAdmin();
+  }, [user]);
 
   const navItems = [
     { title: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -45,6 +64,10 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ onLinkClick }) => {
     { title: "Logs", href: "/logs", icon: FileText },
     { title: "Perfil", href: "/profile", icon: UserCircle },
   ];
+
+  if (isAdmin) {
+    navItems.push({ title: "Admin Panel", href: "/admin", icon: Shield });
+  }
 
   const handleLogout = async () => {
     try {
