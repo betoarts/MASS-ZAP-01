@@ -129,6 +129,8 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
           mediaCaption: values.mediaCaption || undefined,
           linkPreview: values.linkPreview,
           mentionsEveryOne: values.mentionsEveryOne,
+          phone_number: customer.phone_number,
+          name: customer.name,
         },
       });
 

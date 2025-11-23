@@ -53,8 +53,12 @@ serve(async (req) => {
     const mediaCaption = body.mediaCaption;
     const linkPreview = body.linkPreview;
     const mentionsEveryOne = body.mentionsEveryOne;
+    
+    // New fields for direct sending
+    let phoneNumber = body.phone_number;
+    let customerName = body.name;
 
-    if (!userId || !customerId || !instanceId || !messageText) {
+    if (!userId || !instanceId || !messageText) {
       await addLog(null, userId || 'unknown', 'error', 'Parâmetros obrigatórios ausentes para envio de proposta.', { body });
       return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -62,18 +66,31 @@ serve(async (req) => {
       });
     }
 
-    // Cliente
-    const { data: customer, error: customerError } = await supabaseClient
-      .from('customers')
-      .select('*')
-      .eq('id', customerId)
-      .single();
+    // Cliente lookup if customerId is provided and valid
+    let customer = null;
+    if (customerId && customerId !== 'temp') {
+      const { data: fetchedCustomer, error: customerError } = await supabaseClient
+        .from('customers')
+        .select('*')
+        .eq('id', customerId)
+        .single();
 
-    if (customerError || !customer) {
-      await addLog(null, userId, 'error', `Cliente não encontrado ou erro ao buscar detalhes: ${customerError?.message || 'Não encontrado'}`, { customerId });
-      return new Response(JSON.stringify({ error: 'Cliente não encontrado ou erro ao buscar detalhes.' }), {
+      if (customerError || !fetchedCustomer) {
+        await addLog(null, userId, 'error', `Cliente não encontrado ou erro ao buscar detalhes: ${customerError?.message || 'Não encontrado'}`, { customerId });
+        return new Response(JSON.stringify({ error: 'Cliente não encontrado ou erro ao buscar detalhes.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 404,
+        });
+      }
+      customer = fetchedCustomer;
+      phoneNumber = customer.phone_number;
+      customerName = customer.name;
+    }
+
+    if (!phoneNumber) {
+       return new Response(JSON.stringify({ error: 'Número de telefone não fornecido.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 404,
+        status: 400,
       });
     }
 
@@ -96,15 +113,14 @@ serve(async (req) => {
     let personalizedMessage = messageText;
     let personalizedCaption = mediaCaption || '';
 
-    const firstName = customer.name?.split(' ')[0] || 'Cliente';
-    const fullName = customer.name || 'Cliente';
+    const firstName = customerName?.split(' ')[0] || 'Cliente';
+    const fullName = customerName || 'Cliente';
 
     personalizedMessage = personalizedMessage.replace(/{{primeiro_nome}}/g, firstName);
     personalizedMessage = personalizedMessage.replace(/{{nome_completo}}/g, fullName);
     personalizedCaption = personalizedCaption.replace(/{{primeiro_nome}}/g, firstName);
     personalizedCaption = personalizedCaption.replace(/{{nome_completo}}/g, fullName);
 
-    const phoneNumber = customer.phone_number;
     const evolutionApiUrl = `${instance.url}/message/sendText/${instance.instance_name}`;
     const evolutionMediaApiUrl = `${instance.url}/message/sendMedia/${instance.instance_name}`;
 
@@ -131,14 +147,14 @@ serve(async (req) => {
           body: JSON.stringify(textPayload),
         });
         if (res.ok) {
-          await addLog(null, userId, 'proposal_sent', `Proposta de texto enviada para ${phoneNumber}.`, { customer_id: customer.id, phone_number: phoneNumber, type: 'text' });
+          await addLog(null, userId, 'proposal_sent', `Proposta de texto enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'text' });
           messageSentSuccessfully = true;
         } else {
           const errorBody = await res.json();
-          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta de texto para ${phoneNumber}.`, { customer_id: customer.id, phone_number: phoneNumber, error_response: errorBody, type: 'text' });
+          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta de texto para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'text' });
         }
       } catch (fetchError: any) {
-        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta de texto para ${phoneNumber}: ${fetchError.message}`, { customer_id: customer.id, phone_number: phoneNumber, error_details: fetchError.message, type: 'text' });
+        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta de texto para ${phoneNumber}: ${fetchError.message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: fetchError.message, type: 'text' });
       }
     }
 
@@ -164,17 +180,17 @@ serve(async (req) => {
           body: JSON.stringify(mediaPayload),
         });
         if (res.ok) {
-          await addLog(null, userId, 'proposal_sent', `Proposta com mídia enviada para ${phoneNumber}.`, { customer_id: customer.id, phone_number: phoneNumber, type: 'media' });
+          await addLog(null, userId, 'proposal_sent', `Proposta com mídia enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'media' });
         } else {
           const errorBody = await res.json();
-          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta com mídia para ${phoneNumber}.`, { customer_id: customer.id, phone_number: phoneNumber, error_response: errorBody, type: 'media' });
+          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta com mídia para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'media' });
         }
       } catch (fetchError: any) {
-        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta com mídia para ${phoneNumber}: ${fetchError.message}`, { customer_id: customer.id, phone_number: phoneNumber, error_details: fetchError.message, type: 'media' });
+        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta com mídia para ${phoneNumber}: ${fetchError.message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: fetchError.message, type: 'media' });
       }
     }
 
-    return new Response(JSON.stringify({ message: `Proposta enviada para o cliente ${customerId} com sucesso.` }), {
+    return new Response(JSON.stringify({ message: `Proposta enviada para o cliente ${customerId || phoneNumber} com sucesso.` }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
