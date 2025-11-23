@@ -35,7 +35,7 @@ interface Profile {
   first_name: string | null;
   last_name: string | null;
   email?: string; // Joined from auth.users if possible, or we just use what we have
-  account_status: "active" | "paused" | "blocked";
+  account_status: "active" | "paused" | "blocked" | "pending";
   trial_ends_at: string | null;
   instance_count: number;
   created_at: string;
@@ -126,6 +126,7 @@ export const AdminUsers = () => {
       case "active": return <Badge className="bg-green-100 text-green-800">Ativo</Badge>;
       case "paused": return <Badge className="bg-yellow-100 text-yellow-800">Pausado</Badge>;
       case "blocked": return <Badge className="bg-red-100 text-red-800">Bloqueado</Badge>;
+      case "pending": return <Badge className="bg-blue-100 text-blue-800">Pendente</Badge>;
       default: return <Badge variant="outline">{status}</Badge>;
     }
   };
