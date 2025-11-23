@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, MoreHorizontal, UserPlus, MessageSquare } from "lucide-react";
+import { Loader2, MoreHorizontal, UserPlus, MessageSquare, PlusCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +34,8 @@ import { Input } from "@/components/ui/input";
 import { addCustomer, getCustomers } from "@/lib/crm-storage";
 import { SendProposalForm } from "@/components/crm/SendProposalForm";
 import { useSession } from "@/components/auth/SessionContextProvider";
+import { InstanceForm } from "@/components/instances/InstanceForm";
+import { saveInstance, Instance } from "@/lib/storage";
 
 interface Profile {
   id: string;
@@ -56,6 +58,8 @@ export function AdminUsers() {
   const [trialDays, setTrialDays] = useState("3");
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [selectedUserForMessage, setSelectedUserForMessage] = useState<Profile | null>(null);
+  const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false);
+  const [selectedUserForInstance, setSelectedUserForInstance] = useState<Profile | null>(null);
   const { user: currentUser } = useSession();
 
   const fetchUsers = async () => {
@@ -184,6 +188,31 @@ export function AdminUsers() {
     setIsMessageModalOpen(true);
   };
 
+  const handleOpenInstanceModal = (profile: Profile) => {
+    setSelectedUserForInstance(profile);
+    setIsInstanceDialogOpen(true);
+  };
+
+  const handleSaveInstance = async (instanceData: Instance) => {
+    if (!selectedUserForInstance) return;
+
+    try {
+      const result = await saveInstance(selectedUserForInstance.id, instanceData);
+      if (result) {
+        toast.success(`Instância criada com sucesso para ${selectedUserForInstance.first_name}!`);
+        setIsInstanceDialogOpen(false);
+        // Optionally refresh users to update instance count if we were tracking it live
+      } else {
+        throw new Error("Falha ao salvar instância.");
+      }
+    } catch (error) {
+       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao criar instância", {
+        description: errorMessage,
+      });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active": return <Badge className="bg-green-100 text-green-800">Ativo</Badge>;
@@ -266,6 +295,9 @@ export function AdminUsers() {
                       <DropdownMenuItem onClick={() => handleOpenMessageModal(user)}>
                         <MessageSquare className="mr-2 h-4 w-4" /> Enviar Mensagem
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleOpenInstanceModal(user)}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Criar Instância
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => handleStatusChange(user.id, "active")}>
                         Ativar
@@ -320,6 +352,9 @@ export function AdminUsers() {
           <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Enviar Mensagem para {selectedUserForMessage.first_name}</DialogTitle>
+              <DialogDescription>
+                Envie uma mensagem direta via WhatsApp para este usuário.
+              </DialogDescription>
             </DialogHeader>
             <SendProposalForm 
               customer={{
@@ -332,6 +367,20 @@ export function AdminUsers() {
               }} 
               onProposalSent={() => setIsMessageModalOpen(false)} 
             />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {selectedUserForInstance && (
+        <Dialog open={isInstanceDialogOpen} onOpenChange={setIsInstanceDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Criar Instância para {selectedUserForInstance.first_name}</DialogTitle>
+              <DialogDescription>
+                Configure uma nova instância do WhatsApp para este usuário.
+              </DialogDescription>
+            </DialogHeader>
+            <InstanceForm onSave={handleSaveInstance} />
           </DialogContent>
         </Dialog>
       )}
