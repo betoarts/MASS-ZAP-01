@@ -15,19 +15,27 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 const formSchema = z.object({
   firstName: z.string().min(2, "Nome deve ter no mínimo 2 caracteres"),
   lastName: z.string().min(2, "Sobrenome deve ter no mínimo 2 caracteres"),
-  phone: z.string().min(10, "Telefone deve ter no mínimo 10 dígitos"),
+  phone: z.string().regex(/^\d{10,13}$/, "Informe DDD + número (somente dígitos, ex: 11999999999)."),
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
 });
 
 export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [countryCode, setCountryCode] = useState<string>('55');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -43,6 +51,8 @@ export function RegisterForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
+      const digits = String(values.phone || '').replace(/\D+/g, '');
+      const phoneNormalized = `${countryCode}${digits}`;
       const { error } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
@@ -50,7 +60,7 @@ export function RegisterForm() {
           data: {
             first_name: values.firstName,
             last_name: values.lastName,
-            phone: values.phone,
+            phone: phoneNormalized,
           },
         },
       });
@@ -107,6 +117,19 @@ export function RegisterForm() {
             )}
           />
         </div>
+        <FormItem>
+          <FormLabel>País (DDI)</FormLabel>
+          <Select value={countryCode} onValueChange={setCountryCode}>
+            <FormControl>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o país" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              <SelectItem value="55">Brasil (+55)</SelectItem>
+            </SelectContent>
+          </Select>
+        </FormItem>
         <FormField
           control={form.control}
           name="phone"
@@ -114,7 +137,21 @@ export function RegisterForm() {
             <FormItem>
               <FormLabel>WhatsApp / Telefone</FormLabel>
               <FormControl>
-                <Input placeholder="5511999999999" {...field} />
+                <Input
+                  placeholder={"11999999999"}
+                  {...field}
+                  value={field.value}
+                  onChange={(e) => {
+                    const raw = e.target.value || "";
+                    const digitsOnly = raw.replace(/\D+/g, "");
+                    field.onChange(digitsOnly);
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const text = (e.clipboardData.getData("text") || "").replace(/\D+/g, "");
+                    field.onChange(text);
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

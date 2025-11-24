@@ -1,6 +1,4 @@
-// @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -8,19 +6,57 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface Campaign {
+  id: string;
+  user_id: string;
+  name: string;
+  status: 'draft' | 'scheduled' | 'running' | 'paused' | 'stopped' | 'completed' | 'failed';
+  instance_id: string;
+  contact_list_id: string;
+  message_text: string;
+  media_url?: string;
+  media_caption?: string;
+  scheduled_at?: string;
+  min_delay: number;
+  max_delay: number;
+  link_preview: boolean;
+  mentions_every_one: boolean;
+  created_at: string;
+}
+
+interface Instance {
+  id: string;
+  user_id: string;
+  name: string;
+  url: string;
+  api_key: string;
+  instance_name: string;
+}
+
+interface Contact {
+  id: string;
+  contact_list_id: string;
+  phone_number: string;
+  first_name?: string;
+  full_name?: string;
+  email?: string;
+  custom_data?: Record<string, string>;
+}
+
 // Helper function for random delay
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
   
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
   const supabaseClient = createClient(
-    // @ts-ignore
-    Deno.env.get('SUPABASE_URL') ?? '',
-    // @ts-ignore
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    supabaseUrl,
+    supabaseServiceKey,
     {
       auth: {
         persistSession: false,
@@ -31,12 +67,12 @@ serve(async (req) => {
   let campaignId: string | undefined;
   let userId: string | undefined;
 
-  const addLog = async (campaignId: string, userId: string, event_type: string, message: string, metadata?: Record<string, any>) => {
+  const addLog = async (campaignId: string, userId: string, event_type: string, message: string, metadata?: Record<string, unknown>) => {
     await supabaseClient
       .from('campaign_logs')
       .insert({
         user_id: userId,
-        campaign_id: campaignId,
+        campaign_id: campaignId === 'unknown' ? null : campaignId,
         event_type,
         message,
         metadata,
@@ -66,20 +102,22 @@ serve(async (req) => {
     await addLog(campaignId, userId, 'campaign_received', 'Solicitação recebida para processar a campanha.');
 
     // 1. Buscar detalhes da campanha
-    const { data: campaign, error: campaignError } = await supabaseClient
+    const { data: campaignData, error: campaignError } = await supabaseClient
       .from('campaigns')
       .select('*')
       .eq('id', campaignId)
       .eq('user_id', userId)
       .single();
 
-    if (campaignError || !campaign) {
+    if (campaignError || !campaignData) {
       await addLog(campaignId, userId, 'error', `Campanha não encontrada ou erro ao buscar detalhes: ${campaignError?.message || 'Não encontrada'}`);
       return new Response(JSON.stringify({ error: 'Campanha não encontrada ou erro ao buscar detalhes' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 404,
       });
     }
+
+    const campaign = campaignData as Campaign;
 
     // Atualizar status para 'running' quando aplicável
     if (campaign.status === 'scheduled' || campaign.status === 'draft') {
@@ -97,14 +135,14 @@ serve(async (req) => {
     }
 
     // 2. Buscar instância
-    const { data: instance, error: instanceError } = await supabaseClient
+    const { data: instanceData, error: instanceError } = await supabaseClient
       .from('instances')
       .select('*')
       .eq('id', campaign.instance_id)
       .eq('user_id', userId) // Ensure the instance belongs to the user
       .single();
 
-    if (instanceError || !instance) {
+    if (instanceError || !instanceData) {
       await supabaseClient.from('campaigns').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', campaignId);
       await addLog(campaignId, userId, 'campaign_status_update', `Status da campanha definido para "falha". Instância não encontrada: ${instanceError?.message || 'Não encontrada'}`);
       return new Response(JSON.stringify({ error: 'Instância não encontrada ou erro ao buscar detalhes' }), {
@@ -113,6 +151,8 @@ serve(async (req) => {
       });
     }
 
+    const instance = instanceData as Instance;
+
     // 3. Buscar contatos
     const { data: listOwner } = await supabaseClient
       .from('contact_lists')
@@ -120,6 +160,7 @@ serve(async (req) => {
       .eq('id', campaign.contact_list_id)
       .eq('user_id', userId)
       .single();
+      
     if (!listOwner) {
       await supabaseClient.from('campaigns').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', campaignId);
       await addLog(campaignId, userId, 'campaign_status_update', `Status da campanha definido para "falha". Lista de contatos não pertence ao usuário.`);
@@ -129,12 +170,12 @@ serve(async (req) => {
       });
     }
 
-    const { data: contacts, error: contactsError } = await supabaseClient
+    const { data: contactsData, error: contactsError } = await supabaseClient
       .from('contacts')
       .select('*')
       .eq('contact_list_id', campaign.contact_list_id);
 
-    if (contactsError || !contacts || contacts.length === 0) {
+    if (contactsError || !contactsData || contactsData.length === 0) {
       await supabaseClient.from('campaigns').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', campaignId);
       await addLog(campaignId, userId, 'campaign_status_update', `Status da campanha definido para "falha". Nenhum contato encontrado para a lista: ${contactsError?.message || 'Não encontrado'}`);
       return new Response(JSON.stringify({ error: 'Nenhum contato encontrado para esta lista ou erro ao buscar detalhes' }), {
@@ -142,6 +183,8 @@ serve(async (req) => {
         status: 404,
       });
     }
+
+    const contacts = contactsData as Contact[];
 
     await addLog(campaignId, userId, 'campaign_started', `Campanha "${campaign.name}" iniciada. Enviando para ${contacts.length} contatos.`);
 
@@ -215,8 +258,9 @@ serve(async (req) => {
             const errorBody = await res.json();
             await addLog(campaignId, userId, 'message_failed', `Falha ao enviar mensagem de texto para ${phoneNumber}.`, { contact_id: contact.id, phone_number: phoneNumber, error_response: errorBody, type: 'text' });
           }
-        } catch (fetchError: any) {
-          await addLog(campaignId, userId, 'message_error', `Erro de rede ao enviar mensagem de texto para ${phoneNumber}: ${fetchError.message}`, { contact_id: contact.id, phone_number: phoneNumber, error_details: fetchError.message, type: 'text' });
+        } catch (fetchError: unknown) {
+          const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+          await addLog(campaignId, userId, 'message_error', `Erro de rede ao enviar mensagem de texto para ${phoneNumber}: ${errorMessage}`, { contact_id: contact.id, phone_number: phoneNumber, error_details: errorMessage, type: 'text' });
         }
       }
 
@@ -247,8 +291,9 @@ serve(async (req) => {
             const errorBody = await res.json();
             await addLog(campaignId, userId, 'message_failed', `Falha ao enviar mensagem de mídia para ${phoneNumber}.`, { contact_id: contact.id, phone_number: phoneNumber, error_response: errorBody, type: 'media' });
           }
-        } catch (fetchError: any) {
-          await addLog(campaignId, userId, 'message_error', `Erro de rede ao enviar mensagem de mídia para ${phoneNumber}: ${fetchError.message}`, { contact_id: contact.id, phone_number: phoneNumber, error_details: fetchError.message, type: 'media' });
+        } catch (fetchError: unknown) {
+          const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+          await addLog(campaignId, userId, 'message_error', `Erro de rede ao enviar mensagem de mídia para ${phoneNumber}: ${errorMessage}`, { contact_id: contact.id, phone_number: phoneNumber, error_details: errorMessage, type: 'media' });
         }
       }
 
@@ -276,15 +321,16 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     if (campaignId && userId) {
       await supabaseClient
         .from('campaigns')
         .update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('id', campaignId);
-      await addLog(campaignId, userId, 'campaign_failed', `Campanha "${campaignId}" falhou devido a um erro inesperado: ${error.message}`, { error_details: error.message });
+      await addLog(campaignId, userId, 'campaign_failed', `Campanha "${campaignId}" falhou devido a um erro inesperado: ${errorMessage}`, { error_details: errorMessage });
     }
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });

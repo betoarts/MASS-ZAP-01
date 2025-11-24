@@ -119,6 +119,14 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
     const loadingToastId = toast.loading(`Enviando proposta para ${customer.name}...`);
 
     try {
+      const normalizePhone = (raw: string) => {
+        const digits = String(raw || "").replace(/\D+/g, "");
+        if (!digits) return raw;
+        if (digits.startsWith("55")) return digits;
+        if (raw.startsWith("+")) return digits;
+        if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+        return digits;
+      };
       const { data, error } = await supabase.functions.invoke('send-proposal', {
         body: {
           userId: user.id,
@@ -129,7 +137,7 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
           mediaCaption: values.mediaCaption || undefined,
           linkPreview: values.linkPreview,
           mentionsEveryOne: values.mentionsEveryOne,
-          phone_number: customer.phone_number,
+          phone_number: normalizePhone(customer.phone_number),
           name: customer.name,
         },
       });
@@ -137,10 +145,31 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
       if (error) {
         console.error("Error invoking send-proposal function:", error);
         toast.error("Falha ao enviar proposta.", { description: error.message, id: loadingToastId });
+      } else if (data && (data.error || data.success === false)) {
+        console.error("Error from send-proposal function:", data);
+        let errorDescription = data.error;
+        const parseDetail = (detail: any) => {
+          if (!detail) return undefined;
+          if (typeof detail === "string") return detail;
+          if (typeof detail.error === "string") return detail.error;
+          if (typeof detail.message === "string") return detail.message;
+          try { return JSON.stringify(detail); } catch { return undefined; }
+        };
+        if (data.details) {
+          const textErr = parseDetail(data.details.text);
+          const mediaErr = parseDetail(data.details.media);
+          if (textErr) errorDescription += ` (Texto: ${textErr})`;
+          if (mediaErr) errorDescription += ` (Mídia: ${mediaErr})`;
+        }
+        toast.error("Falha ao enviar proposta.", { description: errorDescription, id: loadingToastId });
+      } else if (data && data.success === true && data.warning) {
+        toast.success(`Proposta enviada para ${customer.name} com avisos.`, { description: data.warning, id: loadingToastId });
+        onProposalSent();
+        form.reset();
       } else {
         toast.success(`Proposta enviada com sucesso para ${customer.name}!`, { id: loadingToastId });
         onProposalSent();
-        form.reset(); // Reset form after successful send
+        form.reset();
       }
     } catch (error: any) {
       console.error("Unexpected error sending proposal:", error);

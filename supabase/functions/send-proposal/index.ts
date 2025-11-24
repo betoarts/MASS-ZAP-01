@@ -1,8 +1,9 @@
-// @ts-ignore - Deno global types and remote imports
+```typescript
+// @ts-expect-error - Deno global types and remote imports
 /// <reference types="https://deno.land/x/types@1.0.0/types.d.ts" />
 
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
-// @ts-ignore - Remote ES module import
+// @ts-expect-error - Remote ES module import
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -10,15 +11,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   const supabaseClient = createClient(
-    // @ts-ignore - Deno.env is available in Deno runtime
+    // @ts-expect-error - Deno.env is available in Deno runtime
     Deno.env.get('SUPABASE_URL') ?? '',
-    // @ts-ignore - Deno.env is available in Deno runtime
+    // @ts-expect-error - Deno.env is available in Deno runtime
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     {
       auth: {
@@ -59,8 +60,12 @@ serve(async (req) => {
     let customerName = body.name;
 
     if (!userId || !instanceId || !messageText) {
-      await addLog(null, userId || 'unknown', 'error', 'Parâmetros obrigatórios ausentes para envio de proposta.', { body });
-      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes.' }), {
+      const missing: string[] = [];
+      if (!userId) missing.push('userId');
+      if (!instanceId) missing.push('instanceId');
+      if (!messageText) missing.push('messageText');
+      await addLog(null, userId || 'unknown', 'error', `Parâmetros obrigatórios ausentes: ${missing.join(', ')}`, { body, missing });
+      return new Response(JSON.stringify({ success: false, error: `Parâmetros obrigatórios ausentes: ${missing.join(', ')}` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       });
@@ -77,7 +82,7 @@ serve(async (req) => {
 
       if (customerError || !fetchedCustomer) {
         await addLog(null, userId, 'error', `Cliente não encontrado ou erro ao buscar detalhes: ${customerError?.message || 'Não encontrado'}`, { customerId });
-        return new Response(JSON.stringify({ error: 'Cliente não encontrado ou erro ao buscar detalhes.' }), {
+        return new Response(JSON.stringify({ success: false, error: 'Cliente não encontrado ou erro ao buscar detalhes.' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 404,
         });
@@ -87,8 +92,18 @@ serve(async (req) => {
       customerName = customer.name;
     }
 
+    const normalizePhone = (raw: string) => {
+      const digits = String(raw || '').replace(/\D+/g, '');
+      if (!digits) return raw;
+      if (digits.startsWith('55')) return digits;
+      if (raw?.startsWith('+')) return digits;
+      if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+      return digits;
+    };
+    phoneNumber = normalizePhone(phoneNumber);
+
     if (!phoneNumber) {
-       return new Response(JSON.stringify({ error: 'Número de telefone não fornecido.' }), {
+       return new Response(JSON.stringify({ success: false, error: 'Número de telefone não fornecido.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       });
@@ -104,7 +119,7 @@ serve(async (req) => {
 
     if (instanceError || !instance) {
       await addLog(null, userId, 'error', `Instância não encontrada ou erro ao buscar detalhes: ${instanceError?.message || 'Não encontrada'}`, { instanceId });
-      return new Response(JSON.stringify({ error: 'Instância não encontrada ou erro ao buscar detalhes.' }), {
+      return new Response(JSON.stringify({ success: false, error: 'Instância não encontrada ou erro ao buscar detalhes.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 404,
       });
@@ -130,6 +145,8 @@ serve(async (req) => {
     };
 
     let messageSentSuccessfully = false;
+    let textError: unknown = null;
+    let mediaError: unknown = null;
 
     // Texto
     if (personalizedMessage) {
@@ -151,15 +168,26 @@ serve(async (req) => {
           messageSentSuccessfully = true;
         } else {
           const errorBody = await res.json();
+          textError = errorBody;
           await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta de texto para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'text' });
         }
-      } catch (fetchError: any) {
-        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta de texto para ${phoneNumber}: ${fetchError.message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: fetchError.message, type: 'text' });
+      } catch (fetchError: unknown) {
+        textError = (fetchError as Error).message;
+        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta de texto para ${phoneNumber}: ${(fetchError as Error).message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: (fetchError as Error).message, type: 'text' });
       }
     }
 
     // Mídia
     if (mediaUrl) {
+      const detectMediaType = (url: string) => {
+        const lower = url.toLowerCase();
+        if (lower.endsWith('.mp4') || lower.includes('video')) return 'video';
+        if (lower.endsWith('.pdf')) return 'document';
+        if (lower.endsWith('.doc') || lower.endsWith('.docx')) return 'document';
+        if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) return 'document';
+        if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) return 'document';
+        return 'image';
+      };
       if (personalizedMessage && messageSentSuccessfully) {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
@@ -167,7 +195,7 @@ serve(async (req) => {
       try {
         const mediaPayload = {
           number: phoneNumber,
-          mediatype: mediaUrl.includes('.mp4') ? 'video' : mediaUrl.includes('.pdf') ? 'document' : 'image',
+          mediatype: detectMediaType(mediaUrl),
           media: mediaUrl,
           caption: personalizedCaption,
           delay: 1200,
@@ -183,24 +211,57 @@ serve(async (req) => {
           await addLog(null, userId, 'proposal_sent', `Proposta com mídia enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'media' });
         } else {
           const errorBody = await res.json();
+          mediaError = errorBody;
           await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta com mídia para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'media' });
         }
-      } catch (fetchError: any) {
-        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta com mídia para ${phoneNumber}: ${fetchError.message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: fetchError.message, type: 'media' });
+      } catch (fetchError: unknown) {
+        mediaError = (fetchError as Error).message;
+        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta com mídia para ${phoneNumber}: ${(fetchError as Error).message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: (fetchError as Error).message, type: 'media' });
       }
     }
 
-    return new Response(JSON.stringify({ message: `Proposta enviada para o cliente ${customerId || phoneNumber} com sucesso.` }), {
+    if (textError || mediaError) {
+      const onlyTextFailed = !!textError && !mediaError;
+      const onlyMediaFailed = !!mediaError && !textError;
+      const bothFailed = !!textError && !!mediaError;
+
+      if (bothFailed) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Falha ao enviar proposta.',
+          details: { text: textError, media: mediaError }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      const warning = onlyTextFailed
+        ? 'Texto não foi enviado, mídia enviada com sucesso.'
+        : 'Mídia não foi enviada, texto enviado com sucesso.';
+
+      return new Response(JSON.stringify({
+        success: true,
+        warning,
+        details: { text: textError, media: mediaError }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, message: `Proposta enviada para o cliente ${customerId || phoneNumber} com sucesso.` }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (userId) {
-      await addLog(null, userId, 'proposal_failed_global', `Falha ao enviar proposta devido a erro inesperado: ${error.message}`, { error_details: error.message });
+      await addLog(null, userId, 'proposal_failed_global', `Falha ao enviar proposta devido a erro inesperado: ${(error as Error).message}`, { error_details: (error as Error).message });
     }
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ success: false, error: (error as Error).message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });
   }
 });
+```
