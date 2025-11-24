@@ -36,6 +36,7 @@ import { SendProposalForm } from "@/components/crm/SendProposalForm";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { InstanceForm } from "@/components/instances/InstanceForm";
 import { saveInstance, Instance } from "@/lib/storage";
+import { grantUserQuota, getUserQuota } from "@/lib/log-storage";
 
 interface Profile {
   id: string;
@@ -61,6 +62,10 @@ export function AdminUsers() {
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false);
   const [selectedUserForInstance, setSelectedUserForInstance] = useState<Profile | null>(null);
   const { user: currentUser } = useSession();
+  const [isQuotaDialogOpen, setIsQuotaDialogOpen] = useState(false);
+  const [selectedUserForQuota, setSelectedUserForQuota] = useState<Profile | null>(null);
+  const [quotaAmount, setQuotaAmount] = useState("100");
+  const [quotaMap, setQuotaMap] = useState<Record<string, number>>({});
 
   const fetchUsers = async () => {
     try {
@@ -85,6 +90,19 @@ export function AdminUsers() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    const loadQuotas = async () => {
+      const entries = await Promise.all(users.map(async (u) => {
+        const q = await getUserQuota(u.id);
+        return [u.id, q.remaining] as const;
+      }));
+      const map: Record<string, number> = {};
+      entries.forEach(([id, rem]) => { map[id] = rem; });
+      setQuotaMap(map);
+    };
+    if (users.length > 0) loadQuotas();
+  }, [users]);
 
   const handleStatusChange = async (userId: string, newStatus: Profile['account_status']) => {
     try {
@@ -213,6 +231,33 @@ export function AdminUsers() {
     }
   };
 
+  const handleOpenQuotaDialog = (profile: Profile) => {
+    setSelectedUserForQuota(profile);
+    setQuotaAmount("100");
+    setIsQuotaDialogOpen(true);
+  };
+
+  const handleGrantQuota = async () => {
+    if (!selectedUserForQuota || !currentUser) return;
+    const amount = parseInt(quotaAmount);
+    if (!amount || amount <= 0) {
+      toast.error("Quantidade inválida");
+      return;
+    }
+    const ok = await grantUserQuota(currentUser.id, selectedUserForQuota.id, amount);
+    if (ok) {
+      const { data: prof } = await supabase.from("profiles").select("instance_count").eq("id", selectedUserForQuota.id).single();
+      const current = (prof?.instance_count as number | null) ?? 0;
+      await supabase.from("profiles").update({ instance_count: current + amount, account_status: "active" }).eq("id", selectedUserForQuota.id);
+      toast.success("Pacote de mensagens liberado");
+      setIsQuotaDialogOpen(false);
+      const q = await getUserQuota(selectedUserForQuota.id);
+      setQuotaMap({ ...quotaMap, [selectedUserForQuota.id]: q.remaining });
+    } else {
+      toast.error("Falha ao liberar pacote");
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active": return <Badge className="bg-green-100 text-green-800">Ativo</Badge>;
@@ -243,6 +288,7 @@ export function AdminUsers() {
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Mensagens Disponíveis</TableHead>
               <TableHead>Telefone</TableHead>
               <TableHead>Teste até</TableHead>
               <TableHead>Criado em</TableHead>
@@ -257,6 +303,9 @@ export function AdminUsers() {
                   {user.is_admin && <Badge variant="secondary" className="ml-2">Admin</Badge>}
                 </TableCell>
                 <TableCell>{getStatusBadge(user.account_status)}</TableCell>
+                <TableCell>
+                  <Badge variant="outline">{user.is_admin ? "Ilimitado" : (quotaMap[user.id] ?? 0)}</Badge>
+                </TableCell>
                 <TableCell>
                   {user.phone ? (
                     <Button 
@@ -297,6 +346,9 @@ export function AdminUsers() {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleOpenInstanceModal(user)}>
                         <PlusCircle className="mr-2 h-4 w-4" /> Criar Instância
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleOpenQuotaDialog(user)}>
+                        <MessageSquare className="mr-2 h-4 w-4" /> Adicionar Pacote de Mensagens
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => handleStatusChange(user.id, "active")}>
@@ -381,6 +433,24 @@ export function AdminUsers() {
               </DialogDescription>
             </DialogHeader>
             <InstanceForm onSave={handleSaveInstance} />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {selectedUserForQuota && (
+        <Dialog open={isQuotaDialogOpen} onOpenChange={setIsQuotaDialogOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Adicionar Pacote de Mensagens</DialogTitle>
+              <DialogDescription>Defina a quantidade para {selectedUserForQuota.first_name}.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Input type="number" value={quotaAmount} onChange={(e) => setQuotaAmount(e.target.value)} placeholder="Quantidade" />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsQuotaDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleGrantQuota}>Salvar</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}

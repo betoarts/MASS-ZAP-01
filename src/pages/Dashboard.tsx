@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 
 import { MadeWithDyad } from "@/components/made-with-dyad";
 import { DashboardStatCard } from "@/components/dashboard/DashboardStatCard";
@@ -7,7 +8,7 @@ import { AccountStatusCard } from "@/components/dashboard/AccountStatusCard";
 import { getInstances } from "@/lib/storage";
 import { getContactLists } from "@/lib/contact-storage";
 import { getCampaigns } from "@/lib/campaign-storage";
-import { getAllCampaignLogs, getMessageSentCount } from "@/lib/log-storage";
+import { getAllCampaignLogs, getUserMessageSentCount, getUserQuota, getUserQuotaGrants } from "@/lib/log-storage";
 import { getCustomers } from "@/lib/crm-storage";
 import { Settings, Users, Send, Briefcase, MessageCircle } from "lucide-react";
 import {
@@ -23,7 +24,8 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import PageHeader from "@/components/layout/PageHeader";
 import { useSession } from "@/components/auth/SessionContextProvider";
@@ -31,6 +33,7 @@ import { useSession } from "@/components/auth/SessionContextProvider";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useSession();
+  const queryClient = useQueryClient();
 
   const { data: instances, isLoading: isLoadingInstances } = useQuery({
     queryKey: ["instances", user?.id],
@@ -62,9 +65,45 @@ const Dashboard = () => {
   });
 
   const { data: messageSentCount, isLoading: isLoadingMessageCount } = useQuery({
-    queryKey: ["messageSentCount"],
-    queryFn: getMessageSentCount,
+    queryKey: ["messageSentCount", user?.id],
+    queryFn: () => user ? getUserMessageSentCount(user.id) : 0,
+    enabled: !!user,
   });
+
+  const { data: quota, isLoading: isLoadingQuota } = useQuery({
+    queryKey: ["userQuota", user?.id],
+    queryFn: () => user ? getUserQuota(user.id) : { granted: 0, used: 0, remaining: 0 },
+    enabled: !!user,
+    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: quotaGrants, isLoading: isLoadingQuotaGrants } = useQuery({
+    queryKey: ["userQuotaGrants", user?.id],
+    queryFn: () => user ? getUserQuotaGrants(user.id) : [],
+    enabled: !!user,
+    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
+  });
+
+  React.useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel("quota_realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "campaign_logs" }, (payload: { new: Record<string, unknown> }) => {
+        const log = payload.new;
+        const event = log?.event_type as string;
+        const meta = (log?.metadata as any) || {};
+        const isOurGrant = event === "quota_granted" && meta?.target_user_id === user.id;
+        if (log?.user_id !== user.id && !isOurGrant) return;
+        if (["quota_granted", "message_sent", "proposal_sent"].includes(event)) {
+          queryClient.invalidateQueries({ queryKey: ["userQuota", user.id] });
+          queryClient.invalidateQueries({ queryKey: ["messageSentCount", user.id] });
+        }
+      });
+    channel.subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, queryClient]);
 
   const isLoading =
     isLoadingInstances ||
@@ -72,7 +111,9 @@ const Dashboard = () => {
     isLoadingCampaigns ||
     isLoadingCustomers ||
     isLoadingLogs ||
-    isLoadingMessageCount;
+    isLoadingMessageCount ||
+    isLoadingQuota ||
+    isLoadingQuotaGrants;
 
   const getEventTypeBadge = (eventType: string) => {
     switch (eventType) {
@@ -150,6 +191,7 @@ const Dashboard = () => {
           <Skeleton className="h-24" />
         </div>
       ) : (
+        <div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <DashboardStatCard
             title="Total de Instâncias"
@@ -181,6 +223,42 @@ const Dashboard = () => {
             icon={MessageCircle}
             description="Total enviado pelas campanhas"
           />
+          <DashboardStatCard
+            title="Mensagens Disponíveis"
+            value={quota?.remaining ?? 0}
+            icon={MessageCircle}
+            description="Saldo atual de envios"
+          />
+        </div>
+        
+
+        <div className="space-y-3">
+          <h2 className="text-xl font-semibold">Pacotes de Mensagens</h2>
+          <div className="rounded-md border bg-background p-4">
+            {quotaGrants && quotaGrants.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Quantidade</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {quotaGrants.map((g, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-mono text-xs">
+                        {format(new Date(g.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell>{g.amount}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-sm text-muted-foreground">Nenhum pacote liberado ainda.</div>
+            )}
+          </div>
+        </div>
         </div>
       )}
 

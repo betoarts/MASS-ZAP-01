@@ -101,6 +101,43 @@ serve(async (req: Request) => {
 
     await addLog(campaignId, userId, 'campaign_received', 'Solicitação recebida para processar a campanha.');
 
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userId)
+      .single();
+
+    if (!profile?.is_admin) {
+      const { data: grants } = await supabaseClient
+        .from('campaign_logs')
+        .select('metadata')
+        .eq('user_id', userId)
+        .eq('event_type', 'quota_granted');
+      let grantedTotal = 0;
+      for (const g of grants || []) {
+        const amt = (g as any)?.metadata?.amount;
+        if (typeof amt === 'number' && amt > 0) grantedTotal += amt;
+      }
+      const { count: usedCount } = await supabaseClient
+        .from('campaign_logs')
+        .select('id', { count: 'exact' })
+        .eq('user_id', userId)
+        .in('event_type', ['message_sent', 'proposal_sent'])
+        .limit(1);
+      const remaining = grantedTotal - (usedCount ?? 0);
+      if (remaining <= 10 && remaining > 0) {
+        await addLog(campaignId, userId, 'quota_low', `Saldo baixo: faltam ${remaining} mensagens.`, { remaining });
+      }
+      if ((usedCount ?? 0) >= grantedTotal) {
+        await addLog(campaignId, userId, 'quota_exceeded', 'Limite de mensagens atingido.');
+        await supabaseClient.from('profiles').update({ account_status: 'paused' }).eq('id', userId);
+        return new Response(JSON.stringify({ error: 'Limite de mensagens atingido. Solicite mais pacotes.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 403,
+        });
+      }
+    }
+
     // 1. Buscar detalhes da campanha
     const { data: campaignData, error: campaignError } = await supabaseClient
       .from('campaigns')

@@ -29,7 +29,7 @@ const formSchema = z.object({
   name: z.string().min(2, {
     message: "O nome do cliente deve ter pelo menos 2 caracteres.",
   }),
-  phone_number: z.string().regex(/^55\d{10,13}$/, "Número deve iniciar com 55 e conter DDD+Número (ex: 5511987654321)."),
+  phone_number: z.string().regex(/^\d{10,13}$/, "Informe DDD+Número (ex: 11987654321)."),
   email: z.string().email({ message: "E-mail inválido." }).or(z.literal("")).optional(),
   address: z.string().optional(),
   notes: z.string().optional(),
@@ -46,7 +46,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({ initialData, onSave }) =
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
       name: "",
-      phone_number: "55",
+      phone_number: "",
       email: "",
       address: "",
       notes: "",
@@ -56,7 +56,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({ initialData, onSave }) =
   React.useEffect(() => {
     form.reset(initialData || {
       name: "",
-      phone_number: "55",
+      phone_number: "",
       email: "",
       address: "",
       notes: "",
@@ -116,34 +116,23 @@ export const ClientForm: React.FC<ClientFormProps> = ({ initialData, onSave }) =
               <FormLabel>Número de Telefone</FormLabel>
               <FormControl>
                 <Input
-                  placeholder={`${countryCode}11987654321`}
+                  placeholder={`11987654321`}
                   {...field}
                   value={field.value}
                   onChange={(e) => {
                     const raw = e.target.value || "";
                     const digits = raw.replace(/\D+/g, "");
-                    const ddiRegex = new RegExp(`^${countryCode}+`);
-                    const rest = digits.replace(ddiRegex, "");
-                    const next = `${countryCode}${rest}`;
-                    field.onChange(next);
-                  }}
-                  onKeyDown={(e) => {
-                    const input = e.target as HTMLInputElement;
-                    const pos = input.selectionStart ?? 0;
-                    if ((e.key === "Backspace" || e.key === "Delete") && pos <= countryCode.length) {
-                      e.preventDefault();
-                    }
+                    field.onChange(digits);
                   }}
                   onPaste={(e) => {
                     e.preventDefault();
                     const text = (e.clipboardData.getData("text") || "").replace(/\D+/g, "");
-                    const next = text.startsWith(countryCode) ? text : `${countryCode}${text}`;
-                    field.onChange(next);
+                    field.onChange(text);
                   }}
                 />
               </FormControl>
               <FormDescription>
-                Deve iniciar com o DDI selecionado (Brasil +55) seguido de DDD + Número.
+                Informe apenas DDD + Número. O DDI do país selecionado acima será aplicado automaticamente.
               </FormDescription>
               <FormMessage />
             </FormItem>

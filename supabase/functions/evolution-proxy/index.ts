@@ -21,6 +21,12 @@ type ProxyBody =
       instanceName: string
       apiKey: string
     }
+  | {
+      action: "grantQuota"
+      userId: string
+      amount: number
+      adminId?: string
+    }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -89,6 +95,37 @@ serve(async (req) => {
       "Content-Type": "application/json",
       "Accept": "application/json",
       apikey: apiKey,
+    }
+
+    if (body.action === "grantQuota") {
+      const amount = (body as any)?.amount
+      const userId = (body as any)?.userId
+      const adminId = (body as any)?.adminId ?? "admin"
+      if (!userId || !amount || amount <= 0) {
+        return new Response(JSON.stringify({ success: false, error: "Parâmetros inválidos" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+      const { error } = await supabase
+        .from("campaign_logs")
+        .insert({
+          user_id: userId,
+          campaign_id: null,
+          event_type: "quota_granted",
+          message: `Pacote liberado: ${amount} mensagens`,
+          metadata: { amount, granted_by: adminId },
+        })
+      if (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
     }
 
     let targetUrl = ""

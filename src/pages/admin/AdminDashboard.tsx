@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DashboardStatCard } from "@/components/dashboard/DashboardStatCard";
 import { Users, ShieldCheck, ShieldAlert, Server, Activity } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InstanceListAdmin } from "@/components/admin/InstanceListAdmin";
 
 export const AdminDashboard = () => {
   const [stats, setStats] = React.useState({
@@ -30,16 +31,35 @@ export const AdminDashboard = () => {
         // Fetch instances stats
         const { data: instances } = await supabase
           .from("instances")
-          .select("id"); // We might need a status column if it exists, but for now just count
+          .select("id, user_id");
 
         const totalInstances = instances?.length || 0;
+        let activeInstances = 0;
+        if (instances && instances.length > 0) {
+          const results = await Promise.all(
+            instances.map(async (inst: any) => {
+              try {
+                const { data, error } = await supabase.functions.invoke("evolution-proxy", {
+                  body: { action: "connectionState", instanceId: inst.id, userId: inst.user_id },
+                });
+                if (error) return false;
+                const payload = (data as any)?.data || {};
+                const state: string = payload?.instance?.state || payload?.state || "";
+                return state === "open";
+              } catch {
+                return false;
+              }
+            })
+          );
+          activeInstances = results.filter(Boolean).length;
+        }
 
         setStats({
           totalUsers,
           activeTrials,
           blockedUsers,
           totalInstances,
-          activeInstances: totalInstances, // Assuming all listed are active for now
+          activeInstances,
         });
       } catch (error) {
         console.error("Error fetching admin stats:", error);
@@ -89,8 +109,18 @@ export const AdminDashboard = () => {
           title="Total de Instâncias"
           value={stats.totalInstances}
           icon={Server}
-          description="Instâncias conectadas"
+          description="Instâncias cadastradas"
         />
+        <DashboardStatCard
+          title="Instâncias Conectadas"
+          value={stats.activeInstances}
+          icon={ShieldCheck}
+          description="Conectadas agora"
+        />
+      </div>
+
+      <div className="mt-8">
+        <InstanceListAdmin />
       </div>
     </div>
   );

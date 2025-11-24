@@ -95,7 +95,12 @@ export const HeaderBar: React.FC = () => {
       .channel("app_realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "campaign_logs" }, (payload: { new: Record<string, unknown> }) => {
         const log = payload.new;
-        if (user?.id && log?.user_id && log.user_id !== user.id) return;
+        if (user?.id) {
+          const event = log?.event_type as string;
+          const meta = (log?.metadata as any) || {};
+          const isQuotaGrantForUser = event === "quota_granted" && meta?.target_user_id === user.id;
+          if (!isQuotaGrantForUser && log?.user_id && log.user_id !== user.id) return;
+        }
         const allowed = [
           "webhook_received",
           "webhook_error",
@@ -112,6 +117,9 @@ export const HeaderBar: React.FC = () => {
           "scheduler_started",
           "scheduler_invoked",
           "scheduler_error",
+          "quota_granted",
+          "quota_exceeded",
+          "quota_low",
         ];
         if (!allowed.includes(log.event_type as string)) return;
         const item = { id: log.id as string, type: log.event_type as string, message: log.message as string, created_at: log.created_at as string, campaign_id: (log.campaign_id as string) ?? undefined };
@@ -133,6 +141,9 @@ export const HeaderBar: React.FC = () => {
           scheduler_started: "Agendador iniciou",
           scheduler_invoked: "Agendador invocou envio",
           scheduler_error: "Erro do agendador",
+          quota_granted: "Pacote de mensagens liberado",
+          quota_exceeded: "Limite de mensagens atingido",
+          quota_low: "Saldo baixo de mensagens",
         };
         const title = titles[log.event_type as string] || "Novo evento";
         const isError = /error|failed/i.test(log.event_type as string);

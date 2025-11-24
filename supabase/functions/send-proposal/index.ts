@@ -71,6 +71,41 @@ serve(async (req: Request) => {
       });
     }
 
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userId)
+      .single();
+    if (!profile?.is_admin) {
+      const { data: grants } = await supabaseClient
+        .from('campaign_logs')
+        .select('metadata')
+        .eq('user_id', userId)
+        .eq('event_type', 'quota_granted');
+      let grantedTotal = 0;
+      for (const g of grants || []) {
+        const amt = (g as any)?.metadata?.amount;
+        if (typeof amt === 'number' && amt > 0) grantedTotal += amt;
+      }
+      const { count: usedCount } = await supabaseClient
+        .from('campaign_logs')
+        .select('id', { count: 'exact' })
+        .eq('user_id', userId)
+        .in('event_type', ['message_sent', 'proposal_sent'])
+        .limit(1);
+      const remaining = grantedTotal - (usedCount ?? 0);
+      if (remaining <= 10 && remaining > 0) {
+        await addLog(null, userId, 'quota_low', `Saldo baixo: faltam ${remaining} mensagens.`, { remaining });
+      }
+      if ((usedCount ?? 0) >= grantedTotal) {
+        await addLog(null, userId, 'quota_exceeded', 'Limite de mensagens atingido.');
+        await supabaseClient.from('profiles').update({ account_status: 'paused' }).eq('id', userId);
+        return new Response(JSON.stringify({ success: false, error: 'Limite de mensagens atingido. Solicite mais pacotes.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 403,
+        });
+      }
+    }
     // Cliente lookup if customerId is provided and valid
     let customer = null;
     if (customerId && customerId !== 'temp') {
@@ -164,16 +199,16 @@ serve(async (req: Request) => {
           body: JSON.stringify(textPayload),
         });
         if (res.ok) {
-          await addLog(null, userId, 'proposal_sent', `Proposta de texto enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'text' });
+          await addLog(null, userId, 'proposal_sent', `Proposta de texto enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'text', instance_id: instanceId });
           messageSentSuccessfully = true;
         } else {
           const errorBody = await res.json();
           textError = errorBody;
-          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta de texto para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'text' });
+          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta de texto para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'text', instance_id: instanceId });
         }
       } catch (fetchError: unknown) {
         textError = (fetchError as Error).message;
-        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta de texto para ${phoneNumber}: ${(fetchError as Error).message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: (fetchError as Error).message, type: 'text' });
+        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta de texto para ${phoneNumber}: ${(fetchError as Error).message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: (fetchError as Error).message, type: 'text', instance_id: instanceId });
       }
     }
 
@@ -208,15 +243,15 @@ serve(async (req: Request) => {
           body: JSON.stringify(mediaPayload),
         });
         if (res.ok) {
-          await addLog(null, userId, 'proposal_sent', `Proposta com mídia enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'media' });
+          await addLog(null, userId, 'proposal_sent', `Proposta com mídia enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'media', instance_id: instanceId });
         } else {
           const errorBody = await res.json();
           mediaError = errorBody;
-          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta com mídia para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'media' });
+          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta com mídia para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'media', instance_id: instanceId });
         }
       } catch (fetchError: unknown) {
         mediaError = (fetchError as Error).message;
-        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta com mídia para ${phoneNumber}: ${(fetchError as Error).message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: (fetchError as Error).message, type: 'media' });
+        await addLog(null, userId, 'proposal_error', `Erro de rede ao enviar proposta com mídia para ${phoneNumber}: ${(fetchError as Error).message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: (fetchError as Error).message, type: 'media', instance_id: instanceId });
       }
     }
 
