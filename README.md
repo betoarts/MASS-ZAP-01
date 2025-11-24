@@ -86,3 +86,34 @@ O **MassZapp** é uma plataforma completa para gerenciamento de campanhas de Wha
 ## 📄 Licença
 
 Este projeto está licenciado sob a licença MIT.
+## 🔄 Atualizações Recentes
+
+### 🇧🇷 DDI Brasil (+55) e Telefone
+
+- Cadastro de Usuário: selecione o país (Brasil +55) e informe apenas DDD + número no campo de telefone. O sistema combina o DDI com o número local no envio.
+  - Seletor de país: `src/components/auth/RegisterForm.tsx:97–109`
+  - Normalização no submit: `src/components/auth/RegisterForm.tsx:44–56`
+  - Validação local (somente dígitos, sem DDI no input): `src/components/auth/RegisterForm.tsx:21–27`
+- Cadastro de Cliente (CRM): inclui seleção de país (Brasil +55) e impede remover o prefixo do DDI no campo telefone para garantir formato válido.
+  - Seletor de país e bloqueio do prefixo: `src/components/crm/ClientForm.tsx:79–118`
+  - Validação iniciando com 55: `src/components/crm/ClientForm.tsx:25–27`
+- Envio de Propostas: telefones são normalizados (inclusão de +55 quando faltante) no frontend e na Edge Function.
+  - Frontend: `src/components/crm/SendProposalForm.tsx:121–129`
+  - Edge Function: `supabase/functions/send-proposal/index.ts:62–72`
+
+### ✉️ Detalhes do Envio de Propostas
+- Mensagens de Erro Detalhadas: o sistema exibe causas específicas vindas da Evolution API quando texto e/ou mídia falham.
+  - Frontend (toast com detalhes): `src/components/crm/SendProposalForm.tsx:145–165`
+- Sucesso Parcial: se texto for enviado e mídia falhar (ou vice‑versa), o backend retorna `success: true` com `warning`, e o frontend mostra um sucesso com aviso.
+  - Backend: `supabase/functions/send-proposal/index.ts:229–241`
+  - Frontend: `src/components/crm/SendProposalForm.tsx:165–169`
+- Detecção de Tipo de Mídia Melhorada: PDFs, documentos Office e MP4 recebem `mediatype` adequado.
+  - `supabase/functions/send-proposal/index.ts:172–180`
+- Validações Claras: mensagens indicam quais parâmetros obrigatórios estão ausentes.
+  - `supabase/functions/send-proposal/index.ts:62–72`
+
+## ✅ Boas Práticas de Dados
+
+- Salve números de telefone com DDI + DDD + número (ex.: `5511999999999`).
+- Nos formulários, digite somente DDD + número; o DDI é selecionado separadamente e aplicado automaticamente ao enviar.
+- Telefones sem DDI existentes serão normalizados no envio, mas recomenda‑se atualizar cadastros para consistência.
