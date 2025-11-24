@@ -73,20 +73,11 @@ serve(async (req: Request) => {
 
     const { data: profile } = await supabaseClient
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, instance_count')
       .eq('id', userId)
       .single();
     if (!profile?.is_admin) {
-      const { data: grants } = await supabaseClient
-        .from('campaign_logs')
-        .select('metadata')
-        .eq('user_id', userId)
-        .eq('event_type', 'quota_granted');
-      let grantedTotal = 0;
-      for (const g of grants || []) {
-        const amt = (g as any)?.metadata?.amount;
-        if (typeof amt === 'number' && amt > 0) grantedTotal += amt;
-      }
+      const grantedTotal = (profile?.instance_count as number | null) ?? 0;
       const { count: usedCount } = await supabaseClient
         .from('campaign_logs')
         .select('id', { count: 'exact' })
@@ -97,10 +88,10 @@ serve(async (req: Request) => {
       if (remaining <= 10 && remaining > 0) {
         await addLog(null, userId, 'quota_low', `Saldo baixo: faltam ${remaining} mensagens.`, { remaining });
       }
-      if ((usedCount ?? 0) >= grantedTotal) {
-        await addLog(null, userId, 'quota_exceeded', 'Limite de mensagens atingido.');
+      if (remaining <= 0) {
+        await addLog(null, userId, 'quota_exceeded', 'Seu pacote de mensagens acabou. Entre em contato com suporte.');
         await supabaseClient.from('profiles').update({ account_status: 'paused' }).eq('id', userId);
-        return new Response(JSON.stringify({ success: false, error: 'Limite de mensagens atingido. Solicite mais pacotes.' }), {
+        return new Response(JSON.stringify({ success: false, error: 'Seu pacote de mensagens acabou. Entre em contato com suporte.' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 403,
         });

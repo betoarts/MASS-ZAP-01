@@ -15,6 +15,7 @@ import { CampaignFormData } from "@/lib/campaign-utils";
 import PageHeader from "@/components/layout/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { RequireSubscription } from "@/components/auth/RequireSubscription";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const Campaigns = () => {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
@@ -23,6 +24,7 @@ const Campaigns = () => {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingCampaign, setEditingCampaign] = React.useState<Campaign | null>(null);
   const { user } = useSession();
+  const [accountStatus, setAccountStatus] = React.useState<string | null>(null);
 
   const fetchCampaignData = React.useCallback(async () => {
     const fetchedCampaigns = await getCampaigns();
@@ -41,9 +43,23 @@ const Campaigns = () => {
     fetchCampaignData();
   }, [fetchCampaignData]);
 
+  React.useEffect(() => {
+    const fetchStatus = async () => {
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("account_status").eq("id", user.id).single();
+      setAccountStatus((data as any)?.account_status ?? null);
+    };
+    fetchStatus();
+  }, [user]);
+
   const handleSaveCampaign = async (formData: CampaignFormData) => {
     if (!user) {
       toast.error("Você precisa estar logado para criar/atualizar campanhas.");
+      return;
+    }
+
+    if (accountStatus === "paused") {
+      toast.error("Pacote de mensagens encerrado.", { description: "Seu pacote acabou. Entre em contato com suporte." });
       return;
     }
 
@@ -134,7 +150,7 @@ const Campaigns = () => {
         actions={
           <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => { setEditingCampaign(null); setIsFormOpen(true); }}>
+              <Button onClick={() => { setEditingCampaign(null); setIsFormOpen(true); }} disabled={accountStatus === "paused"}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Criar Nova Campanha
               </Button>
             </DialogTrigger>
@@ -155,6 +171,12 @@ const Campaigns = () => {
           </Dialog>
         }
       />
+      {accountStatus === "paused" && (
+        <Alert variant="destructive">
+          <AlertTitle>Pacote de mensagens encerrado</AlertTitle>
+          <AlertDescription>Seu pacote acabou. Entre em contato com suporte para liberar mais envios.</AlertDescription>
+        </Alert>
+      )}
       <CampaignTable
         campaigns={campaigns}
         instances={instances}

@@ -32,6 +32,7 @@ import { Instance, getInstances } from "@/lib/storage";
 import { useSession } from "@/components/auth/SessionContextProvider";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const formSchema = z.object({
   instanceId: z.string().min(1, {
@@ -55,6 +56,7 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
   const { user } = useSession();
   const [instances, setInstances] = React.useState<Instance[]>([]);
   const [isLoadingInstances, setIsLoadingInstances] = React.useState(true);
+  const [accountStatus, setAccountStatus] = React.useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -85,6 +87,15 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
     };
     fetchInstances();
   }, [user, form]);
+
+  React.useEffect(() => {
+    const fetchStatus = async () => {
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("account_status").eq("id", user.id).single();
+      setAccountStatus((data as any)?.account_status ?? null);
+    };
+    fetchStatus();
+  }, [user]);
 
   const handleEmojiClick = (emojiData: EmojiClickData, fieldName: "messageText" | "mediaCaption") => {
     if (fieldName === "messageText") {
@@ -180,6 +191,12 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {accountStatus === "paused" && (
+          <Alert variant="destructive">
+            <AlertTitle>Pacote de mensagens encerrado</AlertTitle>
+            <AlertDescription>Seu pacote de mensagens acabou. Entre em contato com suporte para liberar mais envios.</AlertDescription>
+          </Alert>
+        )}
         <FormField
           control={form.control}
           name="instanceId"
@@ -362,7 +379,7 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
           />
         </div>
 
-        <Button type="submit" className="w-full" disabled={form.formState.isSubmitting || isLoadingInstances || instances.length === 0}>
+        <Button type="submit" className="w-full" disabled={form.formState.isSubmitting || isLoadingInstances || instances.length === 0 || accountStatus === "paused"}>
           {form.formState.isSubmitting ? "Enviando..." : "Enviar Proposta"}
         </Button>
       </form>

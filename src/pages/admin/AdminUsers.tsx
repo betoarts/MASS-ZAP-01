@@ -66,6 +66,7 @@ export function AdminUsers() {
   const [selectedUserForQuota, setSelectedUserForQuota] = useState<Profile | null>(null);
   const [quotaAmount, setQuotaAmount] = useState("100");
   const [quotaMap, setQuotaMap] = useState<Record<string, number>>({});
+  const [showPausedOnly, setShowPausedOnly] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -94,8 +95,16 @@ export function AdminUsers() {
   useEffect(() => {
     const loadQuotas = async () => {
       const entries = await Promise.all(users.map(async (u) => {
-        const q = await getUserQuota(u.id);
-        return [u.id, q.remaining] as const;
+        try {
+          const { data, error } = await supabase.functions.invoke("evolution-proxy", {
+            body: { action: "getQuota", userId: u.id },
+          });
+          if (error) return [u.id, 0] as const;
+          const remaining = (data as any)?.data?.remaining ?? 0;
+          return [u.id, remaining] as const;
+        } catch {
+          return [u.id, 0] as const;
+        }
       }));
       const map: Record<string, number> = {};
       entries.forEach(([id, rem]) => { map[id] = rem; });
@@ -103,6 +112,29 @@ export function AdminUsers() {
     };
     if (users.length > 0) loadQuotas();
   }, [users]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin_quota_realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "campaign_logs" }, async (payload: { new: Record<string, unknown> }) => {
+        const log = payload.new;
+        const event = log?.event_type as string;
+        const targetUserId = (log?.metadata as any)?.target_user_id as string | undefined;
+        const uid = (log?.user_id as string) || targetUserId;
+        if (!uid) return;
+        if (["message_sent", "proposal_sent", "quota_granted"].includes(event)) {
+          const { data } = await supabase.functions.invoke("evolution-proxy", { body: { action: "getQuota", userId: uid } });
+          const remaining = (data as any)?.data?.remaining ?? 0;
+          setQuotaMap((prev) => ({ ...prev, [uid]: remaining }));
+        }
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload: { new: Record<string, unknown> }) => {
+        const prof = payload.new;
+        setUsers((prev) => prev.map(u => u.id === (prof?.id as string) ? { ...u, account_status: (prof?.account_status as any) } : u));
+      });
+    channel.subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const handleStatusChange = async (userId: string, newStatus: Profile['account_status']) => {
     try {
@@ -280,6 +312,11 @@ export function AdminUsers() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Gerenciar Usuários</h1>
+        <div className="flex items-center gap-2">
+          <Button variant={showPausedOnly ? "default" : "outline"} onClick={() => setShowPausedOnly((v) => !v)}>
+            {showPausedOnly ? "Mostrando Pausados" : "Mostrar apenas Pausados"}
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-md border">
@@ -296,7 +333,7 @@ export function AdminUsers() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
+            {(showPausedOnly ? users.filter(u => u.account_status === "paused") : users).map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">
                   {user.first_name} {user.last_name}
@@ -305,6 +342,11 @@ export function AdminUsers() {
                 <TableCell>{getStatusBadge(user.account_status)}</TableCell>
                 <TableCell>
                   <Badge variant="outline">{user.is_admin ? "Ilimitado" : (quotaMap[user.id] ?? 0)}</Badge>
+                  {!user.is_admin && (
+                    <Button variant="link" size="sm" className="ml-2 p-0 h-auto" onClick={() => handleOpenQuotaDialog(user)}>
+                      Liberar Pacote
+                    </Button>
+                  )}
                 </TableCell>
                 <TableCell>
                   {user.phone ? (

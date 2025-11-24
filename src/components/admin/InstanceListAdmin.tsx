@@ -91,58 +91,21 @@ export const InstanceListAdmin: React.FC<InstanceListAdminProps> = ({ className 
         })
       );
 
-      // Compute sent message counts per instance
+      // Compute sent message counts per instance via secure function
       const instanceIds = instancesData?.map((i: any) => i.id) || [];
-      let campaignsData: any[] = [];
+      let countsMap: Record<string, number> = {};
       if (instanceIds.length > 0) {
-        const { data: cData } = await supabase
-          .from("campaigns")
-          .select("id, instance_id")
-          .in("instance_id", instanceIds);
-        campaignsData = cData || [];
+        try {
+          const { data } = await supabase.functions.invoke("evolution-proxy", {
+            body: { action: "instanceCounts", instanceIds },
+          });
+          countsMap = ((data as any)?.data?.counts) || {};
+        } catch {}
       }
-
-      const campaignIdToInstanceId = new Map<string, string>();
-      const allCampaignIds: string[] = [];
-      campaignsData.forEach((c: any) => {
-        campaignIdToInstanceId.set(c.id, c.instance_id);
-        allCampaignIds.push(c.id);
-      });
-
-      let logsData: any[] = [];
-      if (allCampaignIds.length > 0) {
-        const { data: lData } = await supabase
-          .from("campaign_logs")
-          .select("campaign_id")
-          .in("campaign_id", allCampaignIds)
-          .eq("event_type", "message_sent");
-        logsData = lData || [];
-      }
-
-      const counts = new Map<string, number>();
-      logsData.forEach((log: any) => {
-        const instId = campaignIdToInstanceId.get(log.campaign_id);
-        if (!instId) return;
-        counts.set(instId, (counts.get(instId) || 0) + 1);
-      });
-
-      // Include proposals sent via send-proposal (metadata.instance_id)
-      const { data: proposalData } = await supabase
-        .from("campaign_logs")
-        .select("metadata")
-        .eq("event_type", "proposal_sent");
-
-      const proposalCounts = new Map<string, number>();
-      (proposalData || []).forEach((row: any) => {
-        const iid = row?.metadata?.instance_id;
-        if (!iid) return;
-        if (!instanceIds.includes(iid)) return;
-        proposalCounts.set(iid, (proposalCounts.get(iid) || 0) + 1);
-      });
 
       const withCounts = withStatuses.map((inst) => ({
         ...inst,
-        sentCount: (counts.get(inst.id) || 0) + (proposalCounts.get(inst.id) || 0),
+        sentCount: countsMap[inst.id] ?? 0,
       }));
 
       setInstances(withCounts);
