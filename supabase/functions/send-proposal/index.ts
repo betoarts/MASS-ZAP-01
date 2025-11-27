@@ -1,4 +1,3 @@
-```typescript
 // @ts-expect-error - Deno global types and remote imports
 /// <reference types="https://deno.land/x/types@1.0.0/types.d.ts" />
 
@@ -54,16 +53,23 @@ serve(async (req: Request) => {
     const mediaCaption = body.mediaCaption;
     const linkPreview = body.linkPreview;
     const mentionsEveryOne = body.mentionsEveryOne;
+    const mediaType = body.mediaType as ("image" | "video" | "document" | undefined);
+    const mimeType = body.mimeType as (string | undefined);
+    const fileName = body.fileName as (string | undefined);
+    const delayInput = body.delay as (number | undefined);
+    const mentioned = body.mentioned as (string[] | undefined);
+    const quoted = body.quoted as (Record<string, any> | undefined);
+    const lowerMimetypeInput = body.mimetype as (string | undefined);
     
     // New fields for direct sending
     let phoneNumber = body.phone_number;
     let customerName = body.name;
 
-    if (!userId || !instanceId || !messageText) {
+    if (!userId || !instanceId || (!messageText && !mediaUrl)) {
       const missing: string[] = [];
       if (!userId) missing.push('userId');
       if (!instanceId) missing.push('instanceId');
-      if (!messageText) missing.push('messageText');
+      if (!messageText && !mediaUrl) missing.push('messageText|mediaUrl');
       await addLog(null, userId || 'unknown', 'error', `Parâmetros obrigatórios ausentes: ${missing.join(', ')}`, { body, missing });
       return new Response(JSON.stringify({ success: false, error: `Parâmetros obrigatórios ausentes: ${missing.join(', ')}` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -180,7 +186,7 @@ serve(async (req: Request) => {
         const textPayload = {
           number: phoneNumber,
           text: personalizedMessage,
-          delay: 1200,
+          delay: typeof delayInput === 'number' ? delayInput : 1200,
           linkPreview,
           mentionsEveryOne,
         };
@@ -219,15 +225,70 @@ serve(async (req: Request) => {
       }
 
       try {
-        const mediaPayload = {
+        let typeDetected = mediaType || detectMediaType(mediaUrl);
+        const rawUrl = String(mediaUrl || '');
+        const mediaUrlClean = rawUrl.trim().replace(/^`+|`+$/g, '').replace(/^"+|"+$/g, '');
+        if (/[`"]/.test(rawUrl)) {
+          await addLog(null, userId, 'warning', 'URL de mídia continha crases/aspas; limpa antes do envio.', { original_url: rawUrl, cleaned_url: mediaUrlClean });
+        }
+        const lowerUrl = mediaUrlClean.toLowerCase();
+        // Derive filename from URL if missing
+        let finalFileName = fileName;
+        if (!finalFileName) {
+          const urlPart = mediaUrlClean.split('/').pop()?.split('?')[0] || '';
+          finalFileName = urlPart || (typeDetected === 'document' ? 'documento.pdf' : typeDetected === 'video' ? 'video.mp4' : 'image.png');
+        }
+        // Derive mimetype if missing
+        let finalMime = mimeType || lowerMimetypeInput;
+        if (!finalMime) {
+          if (lowerUrl.endsWith('.pdf')) finalMime = 'application/pdf';
+          else if (lowerUrl.endsWith('.png')) finalMime = 'image/png';
+          else if (lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg')) finalMime = 'image/jpeg';
+          else if (lowerUrl.endsWith('.gif')) finalMime = 'image/gif';
+          else if (lowerUrl.endsWith('.mp4')) finalMime = 'video/mp4';
+          else if (typeDetected === 'document') finalMime = 'application/pdf';
+          else if (typeDetected === 'video') finalMime = 'video/mp4';
+          else finalMime = 'image/png';
+        }
+        // Enforce document when file/mime indicates PDF
+        if (finalMime === 'application/pdf' || (finalFileName || '').toLowerCase().endsWith('.pdf')) {
+          typeDetected = 'document';
+        }
+        // Ensure .pdf extension for document type
+        if (typeDetected === 'document' && !(finalFileName || '').toLowerCase().endsWith('.pdf')) {
+          finalFileName = `${finalFileName || 'proposal'}.pdf`;
+        }
+        const effectiveCaption = (personalizedCaption || '').trim() || (typeDetected === 'document' ? 'Proposta' : typeDetected === 'video' ? 'Vídeo' : 'Imagem');
+        const mediaPayload: Record<string, any> = {
           number: phoneNumber,
-          mediatype: detectMediaType(mediaUrl),
-          media: mediaUrl,
-          caption: personalizedCaption,
-          delay: 1200,
+          mediatype: typeDetected,
+          mimetype: finalMime,
+          fileName: finalFileName,
+          media: mediaUrlClean,
+          caption: effectiveCaption,
+          delay: typeof delayInput === 'number' ? delayInput : 1200,
           linkPreview,
           mentionsEveryOne,
         };
+
+        // Sanitize filename
+        if (mediaPayload.fileName) {
+          const nameParts = mediaPayload.fileName.split('.');
+          const ext = nameParts.pop();
+          const name = nameParts.join('.');
+          const safeName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+          mediaPayload.fileName = `${safeName}.${ext}`;
+        }
+        
+        // Force document type if PDF
+        if (mediaPayload.mimetype === 'application/pdf') {
+            mediaPayload.mediatype = 'document';
+        }
+
+        await addLog(null, userId, 'debug_payload', `Sending media payload to Evolution`, { payload: mediaPayload });
+
+        if (Array.isArray(mentioned) && mentioned.length > 0) mediaPayload.mentioned = mentioned;
+        if (quoted && typeof quoted === 'object') mediaPayload.quoted = quoted;
         const res = await fetch(evolutionMediaApiUrl, {
           method: 'POST',
           headers,
@@ -236,9 +297,44 @@ serve(async (req: Request) => {
         if (res.ok) {
           await addLog(null, userId, 'proposal_sent', `Proposta com mídia enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'media', instance_id: instanceId });
         } else {
-          const errorBody = await res.json();
-          mediaError = errorBody;
-          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta com mídia para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody, type: 'media', instance_id: instanceId });
+          const errorBody1 = await res.text();
+          mediaError = errorBody1;
+          await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta com mídia (URL) para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody1, type: 'media', instance_id: instanceId, attempt: 'url', payload_snapshot: mediaPayload });
+          // Fallback: tentar enviar em base64 caso URL pública falhe
+          const getBase64 = async (url: string) => {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error('Falha ao baixar mídia para base64');
+            const buf = await r.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            // @ts-ignore
+            return btoa(binary);
+          };
+          try {
+            const base64Media = await getBase64(mediaUrlClean);
+            const mediaPayloadBase64 = { 
+              ...mediaPayload, 
+              media: `data:${finalMime};base64,${base64Media}`,
+              mediatype: 'document',
+              mimetype: 'application/pdf',
+            };
+            const res2 = await fetch(evolutionMediaApiUrl, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(mediaPayloadBase64),
+            });
+            if (res2.ok) {
+              await addLog(null, userId, 'proposal_sent', `Proposta com mídia (base64) enviada para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, type: 'media', instance_id: instanceId, fallback: 'base64' });
+            } else {
+              const errorBody2 = await res2.text();
+              mediaError = errorBody2;
+              await addLog(null, userId, 'proposal_failed', `Falha ao enviar proposta com mídia (base64) para ${phoneNumber}.`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_response: errorBody2, type: 'media', instance_id: instanceId, attempt: 'base64', payload_snapshot: mediaPayloadBase64 });
+            }
+          } catch (fbErr) {
+            mediaError = (fbErr as Error).message;
+            await addLog(null, userId, 'proposal_error', `Erro no fallback base64 ao enviar mídia: ${(fbErr as Error).message}`, { customer_id: customer?.id || null, phone_number: phoneNumber, error_details: (fbErr as Error).message, type: 'media', instance_id: instanceId });
+          }
         }
       } catch (fetchError: unknown) {
         mediaError = (fetchError as Error).message;
@@ -290,4 +386,3 @@ serve(async (req: Request) => {
     });
   }
 });
-```

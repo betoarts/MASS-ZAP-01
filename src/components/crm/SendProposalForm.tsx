@@ -45,6 +45,7 @@ const formSchema = z.object({
   mediaCaption: z.string().optional(),
   linkPreview: z.boolean().default(false),
   mentionsEveryOne: z.boolean().default(false), // Geralmente não aplicável para envio individual, mas mantido por consistência
+  mediaType: z.enum(["image", "video", "document"]).optional(),
 });
 
 interface SendProposalFormProps {
@@ -57,6 +58,8 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
   const [instances, setInstances] = React.useState<Instance[]>([]);
   const [isLoadingInstances, setIsLoadingInstances] = React.useState(true);
   const [accountStatus, setAccountStatus] = React.useState<string | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [selectedFileName, setSelectedFileName] = React.useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -67,6 +70,7 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
       mediaCaption: "",
       linkPreview: false,
       mentionsEveryOne: false,
+      mediaType: undefined,
     },
   });
 
@@ -96,6 +100,34 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
     };
     fetchStatus();
   }, [user]);
+
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Usuário não autenticado.");
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      const path = `proposals/${authUser.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('campaign_media').upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: ext === 'pdf' ? 'application/pdf' : file.type,
+      });
+      if (uploadError) throw uploadError;
+      const { data: pub } = supabase.storage.from('campaign_media').getPublicUrl(path);
+      const publicUrl = pub?.publicUrl || "";
+      form.setValue("mediaUrl", publicUrl);
+      setSelectedFileName(file.name);
+      const mime = (file.type || '').toLowerCase();
+      if (!form.getValues("mediaType")) {
+        if (mime.includes('pdf')) form.setValue('mediaType', 'document');
+        else if (mime.includes('video')) form.setValue('mediaType', 'video');
+        else form.setValue('mediaType', 'image');
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleEmojiClick = (emojiData: EmojiClickData, fieldName: "messageText" | "mediaCaption") => {
     if (fieldName === "messageText") {
@@ -138,6 +170,27 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
         if (digits.length === 10 || digits.length === 11) return `55${digits}`;
         return digits;
       };
+      // Derivar mimetype e fileName
+      const mediaTypeVal = form.getValues('mediaType');
+      let mimeType: string | undefined;
+      let fileName: string | undefined;
+      if (values.mediaUrl) {
+        fileName = selectedFileName || (values.mediaUrl.split('/').pop()?.split('?')[0] || undefined);
+        const lower = (fileName || '').toLowerCase();
+        if (lower.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (lower.endsWith('.png')) mimeType = 'image/png';
+        else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mimeType = 'image/jpeg';
+        else if (lower.endsWith('.gif')) mimeType = 'image/gif';
+        else if (lower.endsWith('.mp4')) mimeType = 'video/mp4';
+        else if (mediaTypeVal === 'document') mimeType = 'application/pdf';
+        else if (mediaTypeVal === 'video') mimeType = 'video/mp4';
+        else if (mediaTypeVal === 'image') mimeType = 'image/png';
+        // defaults: fileName fallback
+        if (!fileName) {
+          fileName = mediaTypeVal === 'document' ? 'proposal.pdf' : mediaTypeVal === 'video' ? 'video.mp4' : 'image.png';
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke('send-proposal', {
         body: {
           userId: user.id,
@@ -150,6 +203,9 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
           mentionsEveryOne: values.mentionsEveryOne,
           phone_number: normalizePhone(customer.phone_number),
           name: customer.name,
+          mediaType: form.getValues('mediaType'),
+          mimeType,
+          fileName,
         },
       });
 
@@ -290,6 +346,55 @@ export const SendProposalForm: React.FC<SendProposalFormProps> = ({ customer, on
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="mediaType"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tipo de Mídia</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo de mídia" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="image">Imagem</SelectItem>
+                  <SelectItem value="video">Vídeo</SelectItem>
+                  <SelectItem value="document">Documento (PDF)</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Selecione o tipo de mídia. Para PDF, use Documento (sem base64).
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="space-y-2">
+          <FormLabel>Enviar Arquivo (Opcional)</FormLabel>
+          <Input
+            type="file"
+            accept={
+              form.getValues('mediaType') === 'video'
+                ? 'video/*'
+                : form.getValues('mediaType') === 'document'
+                ? '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx'
+                : 'image/*'
+            }
+            disabled={uploading || accountStatus === 'paused'}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              handleFileUpload(file);
+            }}
+          />
+          {selectedFileName && (
+            <div className="text-sm text-muted-foreground">Selecionado: {selectedFileName}</div>
+          )}
+        </div>
 
         <FormField
           control={form.control}
